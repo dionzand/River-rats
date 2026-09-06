@@ -65,32 +65,47 @@ each option wins. Every candidate play is scored against the *same* rollouts —
 between a good card and a bad one is a few percent, and so is the sampling error, so judging
 each option on fresh deals would just pick noise.
 
-Three things they learned from measurement rather than from the rulebook:
+Four things they learned from measurement rather than from the rulebook:
 
 - **The Market is the channel.** It is face up, so it is the one hand the whole table shares:
   every player sees the same cards and any of them can take one. Rollouts therefore always offer
   the whole Market when working out how a hand might finish, rather than treating a Market card
   as something a teammate has to happen to draw — and a bot spending ♣ gives away its *best*
   spare card, not its worst, because a card it cannot play this turn is worth more face up where
-  someone else can use it. This one change took the bots from 45% of hands to 54%.
+  someone else can use it.
 - **Follow the suit.** A blind team can agree on a flush but not on a rank — nobody may say "I
   have another eight", but everyone can see three hearts. Modelling teammates as suit-chasers
   rather than pair-chasers is worth about ten points of hand win rate.
+- **Count only the turns you get.** A hand is always five cards, so the turn order settles who
+  plays them: one each around a table of four, and two for whoever started the hand. A rollout
+  may spend at most that many cards from the player's own hand — finishing the hand out of your
+  own three cards is true playing alone and fantasy at a full table.
 - **The Debt is a bet.** Five Debt defeats a Rat and five ends the players, so a Debt card is
   worth about twice as much against you as for you. Bots raise only late in a hand, when there is
   something to read, and only on a strong read; they refuse to pad a pot that already finishes
   the Rat, and raise freely when one card would.
 
-**How strong are they?** Measured over a few hundred bot-played hands at a table of four: they
-win **about 52% of hands** and **about 1 game in 10**. Losing most games is the game, not the
-bots — the Rat plays eight cards against your five, and defeating both Rats needs ten Debt on
-them before five lands on you, so winning hands is not enough on its own. Worth knowing before
-you blame your teammates: a bot that could see the Rat's face-down cards does no better, so the
-limit is the hand a blind team can build, not what anyone knows.
+They also play a hand they cannot win toward the Joker's Prediction, which pays out whoever wins
+the hand, weighted so that chasing a Joker never costs a winnable hand.
 
-The numbers came from `tests/`-style harnesses run against the engine directly; the loop that
-produced them is straightforward to rebuild if you want to tune the bots yourself — the constants
-worth touching are all at the top of `js/bot.js`.
+**How strong are they?** At a table of four: **about 48% of hands and 4 games in 30**.
+
+**How that was measured, and why it matters.** Hands inside one game share a deal, a River Rat
+and a Market, so a bad game loses several in a row: 250 hands out of 30 games are nothing like
+250 independent samples, and independent runs of that size cannot separate policies that differ
+by a few points. `Bot.setRandom()` exists for this — it holds the shuffle fixed and varies only
+how the bots think, so two policies can be run over the *same* deals. That is the same
+variance-reduction trick the rollouts use internally, turned on the measurement itself. Two
+findings only became visible under it, and one of them had already been wrongly discarded on
+noisier numbers.
+
+Losing most games is the game, not the bots — the Rat plays eight cards against your five, and
+defeating both Rats needs ten Debt on them before five lands on you, so winning hands is not
+enough on its own. Worth knowing before you blame your teammates: a bot that could see the Rat's
+face-down cards does no better, so the limit is the hand a blind team can build, not what anyone
+knows.
+
+The constants worth touching are all at the top of `js/bot.js`.
 
 ## Layout
 
