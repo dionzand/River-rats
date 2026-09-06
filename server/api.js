@@ -15,6 +15,8 @@
   function handle(room, action, body, query) {
     body = body || {};
     query = query || {};
+    // Every request is a chance to notice that somebody has gone.
+    room.sweep();
 
     if (action === 'join') {
       var joined = room.join(body.name);
@@ -28,9 +30,15 @@
 
     var token = body.token || query.token;
     if (!token) return bad('no seat token', 401);
-    if (!room.seatByToken(token)) return bad('not at this table', 403);
+    var seat = room.seatByToken(token);
+    if (!seat) return bad('not at this table', 403);
+    room.markSeen(seat);          // this phone is still here
 
     if (action === 'view') return ok(room.viewFor(token));
+    if (action === 'leave') {
+      var left = room.leave(token);
+      return left.error ? bad(left.error) : ok({ left: true });
+    }
     if (action === 'seat') {
       var changed = room.update(token, { name: body.name, suit: body.suit });
       return changed.error ? bad(changed.error) : ok(room.viewFor(token));
@@ -63,9 +71,15 @@
   /* Long-poll: hold the request open until something changes or time runs out,
      so a phone is not asking every second for nothing. */
   function waitThenView(room, token, since, timeoutMs, setTimer) {
-    if (!room.seatByToken(token)) return Promise.resolve(bad('not at this table', 403));
+    var seat = room.seatByToken(token);
+    if (!seat) return Promise.resolve(bad('not at this table', 403));
+    room.markSeen(seat);
+    room.sweep();
     return room.waitForChange(Number(since) || 0, timeoutMs, setTimer)
-      .then(function () { return ok(room.viewFor(token)); });
+      .then(function () {
+        room.markSeen(seat);
+        return ok(room.viewFor(token));
+      });
   }
 
   var api = { handle: handle, waitThenView: waitThenView };

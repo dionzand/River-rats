@@ -178,3 +178,112 @@ test('phones waiting for a change are woken when something happens', async () =>
   await waiting;
   assert.equal(woke, true, 'a new arrival wakes the phones already looking at the lobby');
 });
+
+/* A room with a clock we control, so "their phone has gone quiet" is testable. */
+function roomWithClock(seed) {
+  let clock = 1000000;
+  const room = new Room({ random: seeded(seed || 40), now: () => clock });
+  return { room, tick: ms => { clock += ms; } };
+}
+
+test('leaving the lobby gives up the seat', () => {
+  const { room } = roomWithClock(41);
+  const host = room.join('A').seat;
+  const guest = room.join('B').seat;
+  assert.equal(room.leave(guest.token).left, true);
+  assert.equal(room.seats.length, 1);
+  assert.equal(room.seats[0].id, 0, 'the seats renumber');
+  assert.ok(room.viewFor(guest.token).error, 'their token no longer works');
+});
+
+test('the last person leaving the lobby closes the table', () => {
+  const { room } = roomWithClock(42);
+  const host = room.join('A').seat;
+  room.leave(host.token);
+  assert.equal(room.status, 'abandoned');
+  assert.equal(room.seats.length, 0);
+});
+
+test('leaving mid-game hands the seat to a bot rather than stranding the table', async () => {
+  const { room } = roomWithClock(43);
+  const a = room.join('A').seat, b = room.join('B').seat;
+  room.start(a.token, 'normal');
+  await new Promise(r => setImmediate(r));
+
+  // whoever is being asked walks off
+  const asking = room.prompt;
+  assert.ok(asking, 'somebody is being asked something');
+  const walker = asking.seat === 0 ? a : b;
+  const stayer = asking.seat === 0 ? b : a;
+  room.leave(walker.token);
+  await new Promise(r => setImmediate(r));
+
+  assert.ok(!room.error, room.error);
+  assert.notEqual(room.status, 'abandoned', 'someone is still playing');
+  assert.ok(room.viewFor(stayer.token).seats.some(s => s.away), 'the table can see they went');
+
+  // the game keeps moving: play on as the one who stayed
+  for (let i = 0; i < 60 && room.status === 'playing'; i++) {
+    await new Promise(r => setImmediate(r));
+    const now = room.prompt;
+    if (!now) continue;
+    if (now.seat !== stayer.id) { room.sweep(); continue; }
+    const seen = room.viewFor(stayer.token);
+    room.answer(stayer.token, now.id, tap(seen.prompt.spec));
+  }
+  assert.ok(room.engine.state.round >= 1);
+  assert.ok(!room.error, room.error);
+});
+
+test('a phone that goes quiet does not hold up the table', async () => {
+  const { room, tick } = roomWithClock(44);
+  const a = room.join('A').seat, b = room.join('B').seat;
+  room.start(a.token, 'normal');
+  await new Promise(r => setImmediate(r));
+
+  const asking = room.prompt;
+  const quiet = asking.seat === 0 ? a : b;
+  const awake = asking.seat === 0 ? b : a;
+  const promptId = asking.id;
+
+  tick(20000);                    // one long-poll cycle: still fine
+  room.sweep();
+  assert.equal(room.prompt && room.prompt.id, promptId, 'a lull is not a departure');
+
+  tick(80000);                    // three cycles missed: they are gone
+  room.markSeen(room.seats[awake.id]);
+  room.sweep();
+  await new Promise(r => setImmediate(r));
+  assert.notEqual(room.prompt && room.prompt.id, promptId,
+    'the question was answered for them so the table moves on');
+  assert.ok(!room.error, room.error);
+});
+
+test('a table everyone has walked away from closes itself', async () => {
+  const { room, tick } = roomWithClock(45);
+  const a = room.join('A').seat, b = room.join('B').seat;
+  room.start(a.token, 'normal');
+  await new Promise(r => setImmediate(r));
+
+  tick(11 * 60 * 1000);           // both phones gone, and a long time passing
+  room.sweep();
+  await new Promise(r => setImmediate(r));
+  assert.equal(room.status, 'abandoned');
+  assert.equal(room.prompt, null, 'nothing is left waiting for an answer');
+});
+
+test('a closed table leaves no promise parked', async () => {
+  const { room } = roomWithClock(46);
+  const a = room.join('A').seat;
+  room.start(a.token, 'normal');
+  await new Promise(r => setImmediate(r));
+  assert.ok(room.prompt);
+
+  let unwound = false;
+  const wasPlaying = room.play().then(() => { unwound = true; });
+  room.close('abandoned');
+  await wasPlaying;
+  await new Promise(r => setImmediate(r));
+  assert.equal(room.prompt, null);
+  assert.ok(unwound, 'the game the room was holding finished rather than hanging');
+});

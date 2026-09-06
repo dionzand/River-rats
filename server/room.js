@@ -18,6 +18,13 @@
   var CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O: they read as 1 and 0
   var SEATS = 4;
 
+  // A phone holds its long poll for 25 seconds, so three missed cycles is a
+  // phone that has locked, lost signal or been closed. Nobody at the table
+  // should be waiting on it after that.
+  var IDLE_MS = 75000;
+  // Everyone gone this long and the table is over rather than paused.
+  var ABANDON_MS = 10 * 60 * 1000;
+
   function makeCode(random) {
     var out = '';
     for (var i = 0; i < 4; i++) {
@@ -47,7 +54,93 @@
     this.result = null;
     this.error = null;
     this.waiters = [];        // resolve functions for phones waiting on a change
+    this.now = options.now || function () { return Date.now(); };
   }
+
+  /* ---------------- who is still here ---------------- */
+
+  Room.prototype.markSeen = function (seat) {
+    if (seat) seat.lastSeen = this.now();
+  };
+
+  Room.prototype.seatIsHere = function (seat) {
+    if (seat.bot) return true;                       // a bot never wanders off
+    if (seat.away) return false;                     // said goodbye
+    return this.now() - (seat.lastSeen || 0) <= IDLE_MS;
+  };
+
+  Room.prototype.peopleHere = function () {
+    var room = this;
+    return this.seats.filter(function (s) { return !s.bot && room.seatIsHere(s); });
+  };
+
+  /* Answers the question in front of the table on behalf of a seat nobody is
+     sitting at. The bot plays their card so the rest of the table is not left
+     waiting on a phone in somebody's pocket. */
+  Room.prototype.answerForAbsentSeat = function () {
+    var prompt = this.prompt;
+    if (!prompt) return false;
+    var seat = this.seats[prompt.seat];
+    if (!seat || this.seatIsHere(seat)) return false;
+    var answer = Bot.answer(prompt.spec, this.engine.publicView(seat.id), this.absentMemo || {});
+    this.absentMemo = this.absentMemo || {};
+    this.prompt = null;
+    prompt.resolve(answer);
+    this.touch();
+    return true;
+  };
+
+  /* Run at the start of every request. No timers: the table only needs tidying
+     when somebody is there to notice, and the long poll brings everybody back
+     within half a minute. */
+  Room.prototype.sweep = function () {
+    if (this.status !== 'playing') return;
+    if (this.peopleHere().length) {
+      this.lastPersonSeen = this.now();
+    } else if (this.now() - (this.lastPersonSeen || this.now()) > ABANDON_MS) {
+      // Nobody has been here for a long while. Close the table rather than
+      // playing the rest of the game out to an empty room.
+      this.close('abandoned');
+      return;
+    }
+    this.answerForAbsentSeat();
+  };
+
+  /* Ends the table. Anything the engine is waiting on is answered so the game
+     it is holding can unwind rather than sit parked forever. */
+  Room.prototype.close = function (why) {
+    if (this.status === 'finished' || this.status === 'abandoned') return;
+    this.status = why || 'abandoned';
+    var prompt = this.prompt;
+    this.prompt = null;
+    if (prompt) {
+      var seat = this.seats[prompt.seat];
+      var view = this.engine.state ? this.engine.publicView(seat ? seat.id : 0) : null;
+      prompt.resolve(view ? Bot.answer(prompt.spec, view, {}) : null);
+    }
+    this.touch();
+  };
+
+  /* Leaving. In the lobby the seat goes; mid-game it stays, because the hand it
+     is holding is part of the game - a bot plays it out instead. */
+  Room.prototype.leave = function (tok) {
+    var seat = this.seatByToken(tok);
+    if (!seat) return { error: 'not at this table' };
+
+    if (this.status === 'lobby') {
+      this.seats = this.seats.filter(function (s) { return s !== seat; });
+      this.seats.forEach(function (s, i) { s.id = i; });
+      if (!this.seats.length) this.close('abandoned');
+      this.touch();
+      return { ok: true, left: true };
+    }
+
+    seat.away = true;
+    this.answerForAbsentSeat();
+    if (!this.peopleHere().length) this.close('abandoned');
+    this.touch();
+    return { ok: true, left: true };
+  };
 
   Room.prototype.touch = function () {
     this.version += 1;
@@ -84,7 +177,10 @@
       token: token(this.random),
       name: (name || '').trim().slice(0, 16) || (asBot ? 'Bot' : 'Player ' + (this.seats.length + 1)),
       suit: this.freeSuit(),
-      bot: !!asBot
+      bot: !!asBot,
+      // Somebody who has just sat down is plainly here, whether or not their
+      // phone has asked us anything yet.
+      lastSeen: this.now()
     };
     this.seats.push(seat);
     this.touch();
@@ -150,6 +246,7 @@
       difficulty: difficulty || 'normal'
     });
     this.status = 'playing';
+    this.lastPersonSeen = this.now();
     this.touch();
     this.play();
     return { ok: true };
@@ -193,6 +290,11 @@
         if (spec.tag === 'turn-action') botMemo = {};
         return Promise.resolve(Bot.answer(spec, engine.publicView(seat.id), botMemo));
       }
+      // A table that has been closed answers itself, so the game unwinds
+      // instead of parking on a question nobody will ever see.
+      if (room.status !== 'playing') {
+        return Promise.resolve(Bot.answer(spec, engine.publicView(seat ? seat.id : 0), botMemo));
+      }
       return new Promise(function (resolve) {
         room.prompt = {
           id: 'p' + room.version + '-' + Math.floor(room.random() * 1e6),
@@ -201,6 +303,9 @@
           resolve: resolve
         };
         room.touch();
+        // The seat may already be empty - somebody left, or their phone went
+        // quiet - in which case nobody is coming to answer this.
+        room.answerForAbsentSeat();
       });
     };
     return {
@@ -254,6 +359,7 @@
   /* ---------------- what one phone is allowed to see ---------------- */
 
   Room.prototype.viewFor = function (tok) {
+    var room = this;
     var seat = this.seatByToken(tok);
     if (!seat) return { error: 'not at this table' };
     var out = {
@@ -262,7 +368,10 @@
       status: this.status,
       you: { id: seat.id, name: seat.name, suit: seat.suit, host: seat.id === 0 },
       seats: this.seats.map(function (s) {
-        return { id: s.id, name: s.name, suit: s.suit, bot: s.bot };
+        return {
+          id: s.id, name: s.name, suit: s.suit, bot: s.bot,
+          away: !room.seatIsHere(s)
+        };
       }),
       error: this.error
     };
