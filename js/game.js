@@ -881,6 +881,7 @@
       debtAtStake: st.debtPile.length,
       prediction: st.prediction,
       jokerAvailable: !!availableJoker(),
+      jokersUnearned: st.jokers.filter(function (j) { return !j.faceUp && !j.removed; }).length,
       jokerInCollective: jokerInCollective(),
       deckCount: st.deck.length,
       discardCount: st.discard.length,

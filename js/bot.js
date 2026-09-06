@@ -19,6 +19,12 @@
   var JOKER_MARGIN = 0.10;  // Jokers are scarce; spend one only for a clear gain
   var NEVER = 2;            // a confidence no hand can reach: do not raise
   var MARKET_TOLL = 0.04;   // what a card is worth left face up for the whole team
+  // Matching the Joker's Prediction earns a Joker whoever wins the hand, so a
+  // hand that cannot be won is still worth steering toward one. Weighted by how
+  // much of the hand is already lost, so it never costs a winnable hand. Off by
+  // default pending a comparison that can actually separate the two.
+  var JOKER_WORTH = Number(root.RR_JOKER_WORTH || 0);
+  var PREDICTION_STRIDE = 3;
   var TEAM_CHOICE = 2;      // Deck cards a rollout offers on top of the whole Market
   // How a modelled teammate weighs what is already on the table. Suits matter
   // more than ranks: nobody may say "I have another eight", but everyone can see
@@ -27,6 +33,12 @@
   // instead costs about ten points of hand win rate.
   var RANK_PULL = 1;
   var SUIT_PULL = 3;
+
+  /* All the bot's own randomness goes through here. Keeping it separate from the
+     shuffle means a test can hold the deal fixed and vary only how the bots
+     think - which is the only way to compare two policies at this sample size,
+     since hands inside one game are far from independent. */
+  var random = function () { return Math.random(); };
 
   function hasJoker(cards) {
     for (var i = 0; i < cards.length; i++) if (cards[i].joker) return true;
@@ -37,7 +49,7 @@
   function dealFrom(pool, n) {
     var out = [];
     for (var i = 0; i < n && pool.length; i++) {
-      var j = Math.floor(Math.random() * pool.length);
+      var j = Math.floor(random() * pool.length);
       out.push(pool[j]);
       pool[j] = pool[pool.length - 1];
       pool.pop();
@@ -57,7 +69,7 @@
     var kings = [];
     for (var i = 0; i < pool.length; i++) if (pool[i].r === 13) kings.push(i);
     if (!kings.length) return;
-    var at = kings[Math.floor(Math.random() * kings.length)];
+    var at = kings[Math.floor(random() * kings.length)];
     pool[at] = pool[pool.length - 1];
     pool.pop();
   }
@@ -103,7 +115,13 @@
         offer: slots > 0 ? view.market.concat(dealFrom(pool, Math.min(offer, pool.length))) : []
       });
     }
-    return { worlds: worlds, slots: slots };
+    var chasing = JOKER_WORTH > 0 && view.jokersUnearned > 0;
+    return {
+      worlds: worlds,
+      slots: slots,
+      prediction: chasing ? view.prediction : null,
+      jokerWorth: chasing ? JOKER_WORTH : 0
+    };
   }
 
   /* Nobody may say what they are holding, but everyone can see the Collective
@@ -126,9 +144,10 @@
     return out;
   }
 
-  /* Plays out the arena: how often this Collective Hand beats the River Rat. */
+  /* Plays out the arena: how often this Collective Hand beats the River Rat, and
+     - when the Prediction is being chased - how often it matches that too. */
   function playOut(arena, ourCards, mine) {
-    var wins = 0;
+    var wins = 0, predicted = 0, checked = 0;
     for (var i = 0; i < arena.worlds.length; i++) {
       var w = arena.worlds[i];
       if (!w.theirs) continue;
@@ -151,8 +170,15 @@
         }
       }
       if (best && Poker.compare(best.ev, w.theirs.ev) > 0) wins += 1;
+      if (arena.prediction && i % PREDICTION_STRIDE === 0) {
+        checked += 1;
+        if (Poker.canForm(cards, arena.prediction)) predicted += 1;
+      }
     }
-    return { win: wins / arena.worlds.length };
+    return {
+      win: wins / arena.worlds.length,
+      prediction: checked ? predicted / checked : 0
+    };
   }
 
   /* What a play is worth: how often it wins the hand.
@@ -163,7 +189,9 @@
      ~220 hands while costing a fifth of the thinking time, which is real on a
      phone. Left out rather than kept as a knob that only looks clever. */
   function scoreIn(arena, ourCards, mine) {
-    return playOut(arena, ourCards, mine).win;
+    var out = playOut(arena, ourCards, mine);
+    if (!arena.jokerWorth) return out.win;
+    return out.win + arena.jokerWorth * out.prediction * (1 - out.win);
   }
 
   /* Pure chance of winning the hand, with no credit for the Prediction - this is
@@ -438,6 +466,9 @@
       var zones = Object.keys(spec.zones || {}).filter(function (z) { return spec.zones[z].length; });
       return zones.length ? { zone: zones[0], id: spec.zones[zones[0]][0] } : null;
     },
+
+    /* Swap in a seeded generator to make a bot's thinking reproducible. */
+    setRandom: function (fn) { random = fn || function () { return Math.random(); }; },
 
     winChance: winChance,
     chatter: chatter,

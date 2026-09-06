@@ -197,3 +197,27 @@ test('a River Rat waiting its turn is known to be out of circulation', async () 
   s.rats[1 - s.activeRat].defeated = true;
   assert.equal(G.publicView(0).waitingRat, false, 'both Rats are on the table now');
 });
+
+test('the view counts how many Jokers are still there to be earned', () => {
+  G.io = botIo();
+  newTable(2);
+  assert.equal(G.publicView(0).jokersUnearned, 2);
+  G.state.jokers[0].faceUp = true;      // earned
+  G.state.jokers[1].removed = true;     // spent
+  assert.equal(G.publicView(0).jokersUnearned, 0);
+});
+
+test('a bot’s thinking can be made reproducible', () => {
+  G.io = botIo();
+  newTable(2);
+  const view = G.publicView(0);
+  const spec = { tag: 'play-card', zones: { hand: view.myHand.map(c => c.id) } };
+  const seed = () => { let x = 12345; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; };
+
+  Bot.setRandom(seed());
+  const first = Bot.answer(spec, view, {});
+  Bot.setRandom(seed());
+  const second = Bot.answer(spec, view, {});
+  Bot.setRandom(null);
+  assert.equal(first.id, second.id, 'same dice, same decision');
+});
