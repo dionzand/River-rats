@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>River Rats</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="description" content="River Rats - a cooperative poker game for one deck of cards, playable on your phone.">
+<meta name="theme-color" content="#0d1b1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="River Rats">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ---------------- Setup ---------------- -->
+  <section id="screen-setup" class="screen">
+    <div class="setup-inner">
+      <h1 class="logo">River<span>Rats</span></h1>
+      <p class="tagline">Two wealthy rats deal you into their poker game. Put five Debt on each of them before they put five on you.</p>
+
+      <div class="field">
+        <label>Players</label>
+        <div class="seg" id="seg-players">
+          <button data-n="1" class="on">Solo</button>
+          <button data-n="2">2</button>
+          <button data-n="3">3</button>
+          <button data-n="4">4</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Characters <small>each player takes an Ace</small></label>
+        <div id="char-picker" class="char-picker"></div>
+      </div>
+
+      <div class="field">
+        <label>Difficulty</label>
+        <div class="seg" id="seg-difficulty">
+          <button data-d="normal" class="on">Normal</button>
+          <button data-d="advanced">Advanced</button>
+          <button data-d="expert">Expert</button>
+        </div>
+        <p class="hint" id="difficulty-hint"></p>
+      </div>
+
+      <button id="btn-start" class="primary big">Deal the cards</button>
+      <button id="btn-resume" class="ghost big" hidden>Resume saved game</button>
+      <button id="btn-rules-setup" class="ghost">How to play</button>
+      <p class="credit">Based on the River Rats rulebook by Mathijs Jansen &amp; Robin Stokkel (Four Suit Studio). Plays with one standard deck plus two Jokers.</p>
+    </div>
+  </section>
+
+  <!-- ---------------- Game ---------------- -->
+  <section id="screen-game" class="screen" hidden>
+    <header class="topbar">
+      <button id="btn-menu" class="icon-btn" aria-label="Menu">☰</button>
+      <div class="scoreline">
+        <span class="chip" id="chip-rat"></span>
+        <span class="chip" id="chip-debt"></span>
+        <span class="chip" id="chip-round"></span>
+      </div>
+      <button id="btn-rules" class="icon-btn" aria-label="Rules">?</button>
+    </header>
+
+    <main id="board">
+      <div class="zone rat-zone">
+        <div class="zone-head">
+          <h2>River Rat’s Hand</h2>
+          <span class="zone-note" id="rat-count"></span>
+        </div>
+        <div class="zone-sub" id="rat-ability"></div>
+        <div class="cards" id="rat-hand"></div>
+        <div class="rat-status" id="rat-status"></div>
+      </div>
+
+      <div class="zone table-zone">
+        <div class="tokens">
+          <div class="token" id="token-prediction"></div>
+          <div class="token" id="token-debt"></div>
+          <div class="token" id="token-jokers"></div>
+          <div class="token" id="token-deck"></div>
+        </div>
+      </div>
+
+      <div class="zone collective-zone">
+        <div class="zone-head">
+          <h2>Collective Hand</h2>
+          <span class="zone-note" id="collective-note"></span>
+        </div>
+        <div class="cards" id="collective"></div>
+      </div>
+
+      <div class="zone market-zone">
+        <div class="zone-head">
+          <h2>Market</h2>
+          <span class="zone-note" id="market-note"></span>
+        </div>
+        <div class="cards" id="market"></div>
+      </div>
+
+      <div class="zone hand-zone">
+        <div class="zone-head">
+          <h2 id="hand-title">Your hand</h2>
+          <span class="zone-note" id="hand-note"></span>
+        </div>
+        <div class="cards" id="hand"></div>
+      </div>
+
+      <div class="zone log-zone">
+        <div class="zone-head"><h2>Log</h2></div>
+        <div id="log"></div>
+      </div>
+    </main>
+
+    <footer id="prompt" class="prompt">
+      <div class="prompt-title" id="prompt-title"></div>
+      <div class="prompt-actions" id="prompt-actions"></div>
+    </footer>
+  </section>
+
+</div>
+
+<!-- ---------------- Overlays ---------------- -->
+<div id="overlay" class="overlay" hidden>
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script src="js/cards.js"></script>
+<script src="js/poker.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
