@@ -104,6 +104,17 @@
       return;
     }
     this.answerForAbsentSeat();
+    this.stopWaitingOnAbsentSeats();
+  };
+
+  /* Nobody waits on a phone that has gone to look at a hand it will never see. */
+  Room.prototype.stopWaitingOnAbsentSeats = function () {
+    if (!this.pendingAck) return;
+    var room = this;
+    this.pendingAck.waiting = this.pendingAck.waiting.filter(function (id) {
+      return room.seats[id] && room.seatIsHere(room.seats[id]);
+    });
+    if (!this.pendingAck.waiting.length) this.everyoneHasSeen();
   };
 
   /* Ends the table. Anything the engine is waiting on is answered so the game
@@ -111,6 +122,7 @@
   Room.prototype.close = function (why) {
     if (this.status === 'finished' || this.status === 'abandoned') return;
     this.status = why || 'abandoned';
+    if (this.pendingAck) this.everyoneHasSeen();
     var prompt = this.prompt;
     this.prompt = null;
     if (prompt) {
@@ -137,6 +149,7 @@
 
     seat.away = true;
     this.answerForAbsentSeat();
+    this.stopWaitingOnAbsentSeats();
     if (!this.peopleHere().length) this.close('abandoned');
     this.touch();
     return { ok: true, left: true };
@@ -318,20 +331,25 @@
         return null;                                        // pacing belongs to each phone
       },
       showResolution: function (r) {
+        room.resolutionSeq = (room.resolutionSeq || 0) + 1;
         room.lastResolution = {
+          seq: room.resolutionSeq,
           playersWin: r.playersWin,
           trueTie: r.trueTie,
           debt: r.debt,
-          ours: r.ours && r.ours.ev,
-          theirs: r.theirs && r.theirs.ev,
+          // The whole thing, evaluation and the five cards it was made from:
+          // the sheet names the hand and dims the cards outside it.
+          ours: r.ours,
+          theirs: r.theirs,
           ourCards: r.ourCards,
           theirCards: r.theirCards,
           predictionHit: r.predictionHit,
           jokerFlipped: r.jokerFlipped,
           predictionLabel: r.predictionLabel
         };
-        room.touch();
-        return Promise.resolve();
+        // Hold the table here until everyone has seen it. Otherwise the next
+        // round is dealt over the hand people are still looking at.
+        return room.waitForEveryoneToSee();
       },
       ratDefeated: function (info) {
         room.lastDefeat = info;
@@ -340,6 +358,41 @@
       },
       gameOver: function () { return Promise.resolve(); }
     };
+  };
+
+  /* ---------------- pausing on a finished hand ---------------- */
+
+  Room.prototype.waitForEveryoneToSee = function () {
+    var room = this;
+    var waiting = this.peopleHere().map(function (s) { return s.id; });
+    if (!waiting.length) {
+      this.touch();
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve) {
+      room.pendingAck = { seq: room.resolutionSeq, waiting: waiting, resolve: resolve };
+      room.touch();
+    });
+  };
+
+  Room.prototype.seen = function (tok, seq) {
+    var seat = this.seatByToken(tok);
+    if (!seat) return { error: 'not at this table' };
+    var ack = this.pendingAck;
+    // Nothing to acknowledge, or an acknowledgement for a hand two rounds back:
+    // either way the table has moved on and there is nothing to do.
+    if (!ack || ack.seq !== seq) return { ok: true };
+    ack.waiting = ack.waiting.filter(function (id) { return id !== seat.id; });
+    if (!ack.waiting.length) this.everyoneHasSeen();
+    this.touch();
+    return { ok: true };
+  };
+
+  Room.prototype.everyoneHasSeen = function () {
+    var ack = this.pendingAck;
+    this.pendingAck = null;
+    this.lastResolution = null;
+    if (ack) ack.resolve();
   };
 
   Room.prototype.answer = function (tok, promptId, value) {
@@ -388,6 +441,7 @@
     out.turn = this.engine.state.current;
     out.reveal = this.reveal;
     out.resolution = this.lastResolution || null;
+    out.mustSee = !!(this.pendingAck && this.pendingAck.waiting.indexOf(seat.id) >= 0);
     out.defeat = this.lastDefeat || null;
     out.result = this.result;
     // Only the phone being asked is told what the question is.
