@@ -24,6 +24,14 @@
       <h1 class="logo">River<span>Rats</span></h1>
       <p class="tagline">Two wealthy rats deal you into their poker game. Put five Debt on each of them before they put five on you.</p>
 
+      <div class="field" id="field-mode" hidden>
+        <label>Where</label>
+        <div class="seg" id="seg-mode">
+          <button data-m="local" class="on">One phone</button>
+          <button data-m="room">Separate phones</button>
+        </div>
+      </div>
+
       <div class="field">
         <label>Players</label>
         <div class="seg" id="seg-players">
@@ -54,6 +62,57 @@
       <button id="btn-resume" class="ghost big" hidden>Resume saved game</button>
       <button id="btn-rules-setup" class="ghost">How to play</button>
       <p class="credit">Based on the River Rats rulebook by Mathijs Jansen &amp; Robin Stokkel (Four Suit Studio). Plays with one standard deck plus two Jokers.</p>
+    </div>
+  </section>
+
+  <!-- ---------------- Room ---------------- -->
+  <section id="screen-room" class="screen" hidden>
+    <div class="setup-inner">
+      <h1 class="logo">River<span>Rats</span></h1>
+
+      <div id="room-entry">
+        <div class="field">
+          <label>Your name</label>
+          <input type="text" id="room-name" class="seat-name" maxlength="16" placeholder="You">
+        </div>
+        <button id="btn-create" class="primary big">Start a new table</button>
+        <p class="hint">You will get a four-letter code to read out.</p>
+        <div class="field" style="margin-top:22px">
+          <label>Or join a table</label>
+          <div class="join-row">
+            <input type="text" id="room-code" class="seat-name code" maxlength="4"
+                   autocapitalize="characters" autocomplete="off" placeholder="CODE">
+            <button id="btn-join" class="primary">Join</button>
+          </div>
+        </div>
+        <button id="btn-room-back" class="ghost">Back</button>
+      </div>
+
+      <div id="room-lobby" hidden>
+        <div class="field">
+          <label>Everyone joins with this code</label>
+          <div class="code-display" id="room-code-display">----</div>
+          <button id="btn-share" class="ghost">Copy the link</button>
+        </div>
+        <div class="field">
+          <label>At the table</label>
+          <div id="room-seats"></div>
+        </div>
+        <div class="field" id="room-host-controls" hidden>
+          <label>Difficulty</label>
+          <div class="seg" id="seg-room-difficulty">
+            <button data-d="first">First game</button>
+            <button data-d="normal" class="on">Normal</button>
+            <button data-d="advanced">Advanced</button>
+            <button data-d="expert">Expert</button>
+          </div>
+        </div>
+        <button id="btn-add-bot" class="ghost big" hidden>Add a bot</button>
+        <button id="btn-room-start" class="primary big" hidden>Deal the cards</button>
+        <p class="hint" id="room-waiting">Waiting for the table’s host to deal…</p>
+        <p class="hint" id="room-error"></p>
+        <button id="btn-room-leave" class="ghost">Leave the table</button>
+      </div>
     </div>
   </section>
 
@@ -134,10 +193,12 @@
   <div class="sheet" id="sheet"></div>
 </div>
 
+<script src="js/config.js"></script>
 <script src="js/cards.js"></script>
 <script src="js/poker.js"></script>
 <script src="js/game.js"></script>
 <script src="js/bot.js"></script>
+<script src="js/net.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

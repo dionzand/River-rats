@@ -906,7 +906,6 @@
         // The public facts a board shows. A phone playing over the network draws
         // from this, so anything face up on the table belongs here.
         round: st.round,
-        difficulty: st.difficulty,
         bonuses: { resolveAtSix: st.bonuses.resolveAtSix },
         rats: st.rats.map(function (r, i) {
           var known = r.defeated || i === st.activeRat;
@@ -947,7 +946,9 @@
         discardCount: st.discard.length,
         difficulty: st.difficulty,
         others: st.players.filter(function (p) { return p.i !== playerIndex; })
-          .map(function (p) { return { name: p.name, suit: p.suit, handCount: p.hand.length }; }),
+          .map(function (p) {
+            return { id: p.i, name: p.name, suit: p.suit, bot: !!p.bot, handCount: p.hand.length };
+          }),
         unseen: unseen
       };
     };
