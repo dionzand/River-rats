@@ -266,3 +266,26 @@ test('an eager player cannot loop forever on the Spades power', async () => {
     Math.random = realRandom;
   }
 });
+
+test('the waiting River Rat leads the Rat’s Hand, ahead of the active one', async () => {
+  const s = stage({ ours: WEAK, theirs: STRONG, ratSuit: 'C' });
+  await G.resolveHand();
+  const rats = s.ratHand.filter(e => e.isRat);
+  assert.equal(rats.length, 2);
+  assert.equal(s.ratHand[0], rats[0], 'the waiting Rat is the first card of the hand');
+  assert.equal(rats[0].inactive, true);
+  assert.equal(rats[0].faceDown, true);
+  assert.equal(rats[1].card.id, s.rats[s.activeRat].card.id, 'the active Rat comes next');
+  assert.equal(rats[1].faceDown, false);
+});
+
+test('a beaten Rat keeps its place in the hand once the second Rat is active', async () => {
+  const s = stage({ ours: STRONG, theirs: WEAK, ratSuit: 'C', ratDebt: 4 });
+  const beaten = s.rats[0].card.id;
+  await G.resolveHand();
+  const rats = s.ratHand.filter(e => e.isRat);
+  assert.equal(rats.length, 2, 'both Rats are on the table, none waiting');
+  assert.ok(rats.every(e => !e.faceDown), 'nothing is hidden any more');
+  assert.equal(rats[0].card.id, s.rats[s.activeRat].card.id, 'the active Rat leads');
+  assert.equal(rats[1].card.id, beaten);
+});

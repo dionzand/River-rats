@@ -185,9 +185,16 @@
     st.collective = [];
     st.ratHand = [];
 
-    // The active Rat, plus any defeated Rat, stays part of the Rat's Hand.
+    // The Rats lead the hand: first the one still waiting its turn, face down and
+    // never revealed, then the active Rat and any it has already been beaten with.
+    st.rats.forEach(function (r, k) {
+      if (k !== st.activeRat && !r.defeated) {
+        st.ratHand.push({ card: r.card, faceDown: true, isRat: true, counts: false, inactive: true });
+      }
+    });
+    st.ratHand.push({ card: activeRat().card, faceDown: false, isRat: true, counts: true });
     st.rats.forEach(function (r, i) {
-      if (i === st.activeRat || r.defeated) {
+      if (i !== st.activeRat && r.defeated) {
         st.ratHand.push({ card: r.card, faceDown: false, isRat: true, counts: true });
       }
     });
@@ -200,12 +207,6 @@
       var d = drawTop();
       if (d) st.ratHand.push({ card: d, faceDown: true, counts: true });
     }
-    // The second, never-activated Rat sits face down but is never revealed.
-    st.rats.forEach(function (r, k) {
-      if (k !== st.activeRat && !r.defeated) {
-        st.ratHand.push({ card: r.card, faceDown: true, isRat: true, counts: false, inactive: true });
-      }
-    });
 
     var pred = drawTop();
     st.predictionCard = pred;
@@ -785,6 +786,17 @@
   G.nextPlayer = function () {
     var st = s();
     st.current = (st.current + 1) % st.players.length;
+  };
+
+  /* True for the two Kings that are River Rats - never for the other two Kings,
+     which are ordinary cards in the Deck. */
+  G.isRatCard = function (card) {
+    var st = s();
+    if (!st || !card || card.joker) return false;
+    for (var i = 0; i < st.rats.length; i++) {
+      if (st.rats[i].card.id === card.id) return true;
+    }
+    return false;
   };
 
   G.RAT_ABILITY = RAT_ABILITY;
