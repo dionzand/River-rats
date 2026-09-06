@@ -1,13 +1,15 @@
 /* Caches the whole game so it keeps working with no signal. */
-var CACHE = 'river-rats-v2';
+var CACHE = 'river-rats-v3';
 var ASSETS = [
   './',
   'index.html',
   'styles.css',
+  'js/config.js',
   'js/cards.js',
   'js/poker.js',
   'js/game.js',
   'js/bot.js',
+  'js/net.js',
   'js/ui.js',
   'manifest.webmanifest',
   'icon.svg',
