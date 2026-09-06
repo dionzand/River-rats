@@ -903,6 +903,23 @@
       return {
         myIndex: playerIndex,
         myHand: me.hand.slice(),
+        // The public facts a board shows. A phone playing over the network draws
+        // from this, so anything face up on the table belongs here.
+        round: st.round,
+        difficulty: st.difficulty,
+        bonuses: { resolveAtSix: st.bonuses.resolveAtSix },
+        rats: st.rats.map(function (r, i) {
+          var known = r.defeated || i === st.activeRat;
+          return {
+            suit: known ? r.card.s : null,     // the waiting Rat keeps its suit
+            debt: r.debt.length,
+            defeated: r.defeated,
+            active: i === st.activeRat
+          };
+        }),
+        collectiveSeeded: st.collective.length > 0 && !!st.collective[0].seeded,
+        jokers: st.jokers.map(function (j) { return { faceUp: j.faceUp, removed: j.removed }; }),
+        current: st.current,
         mySuit: me.suit,
         handLimit: 3,
         collectiveKnown: collectiveKnown,
