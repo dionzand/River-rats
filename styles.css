@@ -195,6 +195,37 @@ button.big { margin-bottom: 10px; }
   color: var(--muted);
   margin: 0;
 }
+/* Anything with something to explain says so, and opens it on a tap. */
+.aid { cursor: pointer; }
+h2.aid::after {
+  content: "ⓘ";
+  margin-left: 5px;
+  font-size: 11px;
+  color: #6d8388;
+  letter-spacing: 0;
+}
+.token i { font-style: normal; font-size: 9px; color: #55696d; }
+.aid:active { opacity: .6; }
+
+.suit-key { display: flex; gap: 5px; margin-top: 9px; }
+.suit-key button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: center;
+}
+.suit-key button .g { display: block; font-size: 15px; color: var(--ink); }
+.suit-key button .g.red { color: #ff9a92; }
+.suit-key button.mine { border-color: rgba(232, 182, 76, .5); background: rgba(232, 182, 76, .07); }
+.suit-key button.mine .tag { display: block; color: var(--gold); font-size: 9px; letter-spacing: .04em; }
+
 .zone-note { font-size: 11px; color: #7f979b; margin-left: auto; text-align: right; }
 .zone-sub { font-size: 11px; color: var(--gold); opacity: .85; margin: -2px 0 8px; line-height: 1.35; }
 .cards { display: flex; flex-wrap: wrap; gap: 6px; min-height: 62px; align-items: center; }
