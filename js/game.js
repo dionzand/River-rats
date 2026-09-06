@@ -689,21 +689,46 @@
       .then(function () {
         var predictionHit = st.prediction && Poker.canForm(collectiveCards(), st.prediction);
         var jokerFlipped = false;
+        st.lastPredictionHit = predictionHit;
+        st.lastJokerFlipped = false;
         if (predictionHit) {
           for (var i = 0; i < st.jokers.length; i++) {
             if (!st.jokers[i].faceUp && !st.jokers[i].removed) {
               st.jokers[i].faceUp = true;
               jokerFlipped = true;
+              st.lastJokerFlipped = true;
               log('The Joker’s Prediction (' + PREDICTION_LABEL[st.prediction] + ') came true - a Joker is now available.', 'joker');
               break;
             }
           }
         }
 
-        st.collective.forEach(function (e) { e.faceDown = false; });
-        st.ratHand.forEach(function (e) { if (!e.inactive) e.faceDown = false; });
+        return revealFaceDown().then(function () { return judge(); });
+      });
+  };
 
-        var ours = Poker.bestFive(collectiveCards());
+  /* Turns the face-down cards over one at a time, giving the interface a chance
+     to make something of each one. The inactive River Rat is never turned over. */
+  function revealFaceDown() {
+    var st = s();
+    var hidden = [];
+    st.collective.forEach(function (e) { if (e.faceDown) hidden.push(e); });
+    st.ratHand.forEach(function (e) { if (e.faceDown && !e.inactive) hidden.push(e); });
+
+    var step = function (i) {
+      if (i >= hidden.length) return Promise.resolve();
+      hidden[i].faceDown = false;
+      var shown = G.io.cardRevealed
+        ? G.io.cardRevealed(hidden[i].card, i, hidden.length)
+        : null;
+      return Promise.resolve(shown).then(function () { return step(i + 1); });
+    };
+    return step(0);
+  }
+
+  function judge() {
+    var st = s();
+    var ours = Poker.bestFive(collectiveCards());
         var theirCards = st.ratHand.filter(function (e) { return e.counts !== false; })
           .map(function (e) { return e.card; });
         var theirs = Poker.bestFive(theirCards);
@@ -729,21 +754,19 @@
         }
         st.debtPile = [];
 
-        return G.io.showResolution({
-          ours: ours,
-          theirs: theirs,
-          ourCards: collectiveCards(),
-          theirCards: theirCards,
-          playersWin: playersWin,
-          trueTie: trueTie,
-          debt: debtCount + extra,
-          predictionHit: predictionHit,
-          jokerFlipped: jokerFlipped,
-          predictionLabel: PREDICTION_LABEL[st.prediction]
-        });
-      })
-      .then(function () { return endOfHand(); });
-  };
+    return G.io.showResolution({
+      ours: ours,
+      theirs: theirs,
+      ourCards: collectiveCards(),
+      theirCards: theirCards,
+      playersWin: playersWin,
+      trueTie: trueTie,
+      debt: debtCount + extra,
+      predictionHit: st.lastPredictionHit,
+      jokerFlipped: st.lastJokerFlipped,
+      predictionLabel: PREDICTION_LABEL[st.prediction]
+    }).then(function () { return endOfHand(); });
+  }
 
   function endOfHand() {
     var st = s();

@@ -33,7 +33,8 @@ Everything in the rulebook, enforced by the engine rather than left to the honou
   Joker's Prediction turned up as the round's first Debt card.
 - **Turns** — refill to a hand limit of three from the Market or the Deck, play a card into the
   Collective Hand, then take that card's **Suit Action** or, if it matches your Ace, your
-  **Player Power**. Or use a face-up Joker instead.
+  **Player Power**. Or use a face-up Joker instead. A turn can be taken back until the hands are
+  resolved — the Deck order is part of the saved state, so replaying it draws the same cards.
 - **Hand Resolution** — the Prediction check that flips a Joker, revealing the face-down cards,
   best five cards on each side, and the rulebook's tiebreakers: flushes, straights and straight
   flushes are decided by their highest card alone, and the River Rats win every True Tie.
@@ -106,6 +107,14 @@ face-down cards does no better, so the limit is the hand a blind team can build,
 knows.
 
 The constants worth touching are all at the top of `js/bot.js`.
+
+## Playing it
+
+Name the seats what you like on the setup screen; the names are remembered for next time. Tap a
+seat to swap between a person and a bot.
+
+At the end of a hand the face-down cards turn over one at a time, and the outcome follows a beat
+later — tap anywhere to hurry it along.
 
 ## Layout
 

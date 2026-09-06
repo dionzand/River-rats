@@ -77,7 +77,22 @@ body {
 }
 .seg button.on { background: var(--gold); color: #241a04; border-color: var(--gold); font-weight: 600; }
 
-.char-picker { display: flex; flex-direction: column; gap: 8px; }
+.char-picker { display: flex; flex-direction: column; gap: 14px; }
+.seat-row { display: flex; flex-direction: column; gap: 6px; }
+.seat-top { display: flex; gap: 6px; }
+.seat-name {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.seat-name::placeholder { color: #6d8388; }
+.seat-name:focus { outline: none; border-color: var(--gold); }
 .char-row { display: flex; align-items: center; gap: 8px; }
 .char-row .who {
   width: 74px;
@@ -279,6 +294,20 @@ button.big { margin-bottom: 10px; }
   border-radius: 9px;
   border: 1px dashed rgba(232, 182, 76, .8);
 }
+/* A card landing face up at the reveal. */
+.card.turning {
+  animation: turn-over .5s cubic-bezier(.2, .7, .3, 1);
+  box-shadow: 0 0 0 2px var(--gold), 0 4px 14px rgba(0, 0, 0, .6);
+}
+@keyframes turn-over {
+  0% { transform: rotateY(90deg) scale(1.06); }
+  55% { transform: rotateY(0deg) scale(1.12); }
+  100% { transform: rotateY(0deg) scale(1); }
+}
+
+.verdict.pending { color: var(--muted); font-weight: 500; }
+.verdict { transition: color .2s ease; }
+
 .card.selectable {
   animation: pulse 1.4s ease-in-out infinite;
   outline: 2px solid var(--green);
@@ -337,6 +366,7 @@ button.big { margin-bottom: 10px; }
 .prompt-actions button.accent { background: var(--gold); color: #241a04; border-color: var(--gold); font-weight: 600; }
 .prompt-actions button.accent .sub { color: #5c4715; }
 .prompt-actions button.quiet { text-align: center; }
+.prompt-actions button.undo { color: var(--muted); font-size: 14px; padding: 9px; }
 
 /* ---------- overlay sheets ---------- */
 

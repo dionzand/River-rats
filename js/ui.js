@@ -22,10 +22,18 @@
     players: 1,
     suits: ['S', 'H', 'D', 'C'],
     bots: [false, true, true, true],   // seat 1 is always the person holding the phone
+    names: ['', '', '', ''],           // blank means "use the default for this seat"
     difficulty: 'normal'
   };
-  var pending = null;   // active pick: { zones, resolve, optional }
-  var revealed = false; // has the current player looked at their hand?
+  var NAMES_KEY = 'riverrats.names.v1';
+  var pending = null;    // active pick: { zones, resolve, optional }
+  var revealed = false;  // has the current player looked at their hand?
+  var turnStart = null;  // the game as it stood when this turn began
+  var turnTouched = false;
+  var epoch = 0;         // bumped to orphan a turn that has been undone
+  var resolving = false; // true once the hands are being resolved
+  var revealedId = null; // the card that just turned over, for the flip
+  var skipReveal = false;
 
   /* ---------------- cards ---------------- */
 
@@ -60,6 +68,7 @@
       b.appendChild(el('span', 's', Cards.SUIT_GLYPH[card.s]));
     }
     if (opts.classes) opts.classes.forEach(function (c) { b.classList.add(c); });
+    if (!opts.faceDown && !card.joker && card.id === revealedId) b.classList.add('turning');
 
     var selectable = pending && pending.zones[opts.zone] &&
       pending.zones[opts.zone].indexOf(card.id) >= 0;
@@ -218,10 +227,12 @@
         if (opt.hint) b.appendChild(el('span', 'sub', opt.hint));
         b.addEventListener('click', function () {
           clearPrompt();
+          turnTouched = true;
           resolve(opt.value);
         });
         box.appendChild(b);
       });
+      addUndo(box);
     });
   }
 
@@ -239,6 +250,7 @@
         box.appendChild(el('button', 'quiet', 'Tap a highlighted card'));
         box.lastChild.disabled = true;
       }
+      addUndo(box);
       render();
       scrollToZones(spec.zones);
     });
@@ -261,6 +273,7 @@
     if (!pending) return;
     var done = pending.resolve;
     pending = null;
+    turnTouched = true;
     clearPrompt();
     render();
     done(id ? { zone: zone, id: id } : null);
@@ -310,6 +323,8 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
+  function hurryReveal() { skipReveal = true; }
+
   function botIsPlaying() {
     return G.state && !G.state.over && G.currentPlayer().bot;
   }
@@ -344,6 +359,37 @@
     choose: function (spec) { return botIsPlaying() ? botAnswer(spec) : showChoice(spec); },
     pick: function (spec) { return botIsPlaying() ? botAnswer(spec) : showPick(spec); },
 
+    /* One face-down card has just been turned over. Show it landing, and give it
+       a moment - the wait before you know is most of the fun. A tap anywhere
+       hurries the rest along for anyone who would rather just know. */
+    cardRevealed: function (card, index, total) {
+      pending = null;
+      revealedId = card.id;
+      if (index === 0) {
+        skipReveal = false;
+        document.addEventListener('click', hurryReveal, true);
+      }
+      $('prompt-title').textContent = 'Turning them over…  ' + (index + 1) + ' / ' + total;
+      $('prompt-actions').innerHTML = '';
+      render();
+      // Most of the face-down cards belong to the River Rat, whose hand sits at
+      // the top of the board - bring whatever is turning over into view.
+      var turning = document.querySelector('.card.turning');
+      if (turning && turning.scrollIntoView) {
+        // Instant, not smooth: the card should already be in view when it turns,
+        // and a scroll animation under a flip animation reads as jitter.
+        turning.scrollIntoView({ block: 'center' });
+      }
+      return delay(skipReveal ? 60 : 520).then(function () {
+        revealedId = null;
+        if (index === total - 1) {
+          document.removeEventListener('click', hurryReveal, true);
+          render();
+          return delay(skipReveal ? 80 : 700);   // the beat before the verdict
+        }
+      });
+    },
+
     passTo: function (player) {
       // Nothing to hide when only one person is holding the phone.
       if (humanCount() < 2) {
@@ -371,11 +417,17 @@
       render(); // the face-down cards have just been turned over
       return openSheet(function (sheet, close) {
         sheet.appendChild(el('h2', null, 'Hand Resolution'));
-        var verdict = el('div', 'verdict ' + (r.playersWin ? 'good' : 'bad'),
-          r.playersWin ? 'The players take it — ' + r.debt + ' Debt onto the River Rat'
-            : (r.trueTie ? 'True Tie — the River Rats win — ' + r.debt + ' Debt to you'
-              : 'The River Rat takes it — ' + r.debt + ' Debt to you'));
+        // Both hands first, the outcome a moment later.
+        var verdict = el('div', 'verdict pending', 'Comparing hands…');
         sheet.appendChild(verdict);
+        setTimeout(function () {
+          if (!verdict.parentNode) return;
+          verdict.className = 'verdict ' + (r.playersWin ? 'good' : 'bad');
+          verdict.textContent = r.playersWin
+            ? 'The players take it — ' + r.debt + ' Debt onto the River Rat'
+            : (r.trueTie ? 'True Tie — the River Rats win — ' + r.debt + ' Debt to you'
+              : 'The River Rat takes it — ' + r.debt + ' Debt to you');
+        }, skipReveal ? 100 : 900);
 
         sheet.appendChild(el('h3', null, 'Collective Hand — ' + Poker.describe(r.ours && r.ours.ev)));
         sheet.appendChild(handRow(r.ourCards, r.ours ? r.ours.cards.map(function (c) { return c.id; }) : null));
@@ -442,22 +494,61 @@
 
   function loop() {
     if (!G.state || G.state.over) return Promise.resolve();
+    // Everything needed to put this turn back the way it started. The Deck order
+    // is part of it, so undoing and replaying draws the same cards - an undo, not
+    // a second roll of the dice.
+    turnStart = JSON.stringify(G.state);
+    turnTouched = false;
+    var myEpoch = ++epoch;
     save();
     render();
     var actor = G.currentPlayer();
     return G.runTurn()
       .then(function () {
+        if (myEpoch !== epoch) return;   // this turn was undone; another is running
         // A bot speaks once its whole turn is done, so what it says can take in
         // everything it did - the card it played and anything it left behind.
         if (actor.bot) talk(actor, botMemo.playScore, G.publicView(actor.i));
         render();
-        if (G.shouldResolve()) return G.resolveHand();
+        if (!G.shouldResolve()) return;
+        resolving = true;
+        return G.resolveHand();
       })
       .then(function () {
+        resolving = false;
+        if (myEpoch !== epoch) return;
         if (G.state.over) { clearSave(); return; }
+        turnStart = null;                // past the point of taking it back
         G.nextPlayer();
         return loop();
       });
+  }
+
+  /* Puts the table back to the start of this turn. The turn in flight is parked
+     on a prompt that will now never be answered, and the epoch check above stops
+     it doing anything if it ever were. */
+  function undoTurn() {
+    if (!turnStart) return;
+    G.state = JSON.parse(turnStart);
+    pending = null;
+    epoch += 1;
+    clearPrompt();
+    G.log('Turn taken back.', 'sys');
+    loop();
+  }
+
+  function canUndo() {
+    // Never once resolution has started: the River Rat's face-down cards are on
+    // the table by then, and taking the turn back would be replaying it knowing
+    // what they are.
+    return !!turnStart && turnTouched && !resolving && !G.state.over && !G.currentPlayer().bot;
+  }
+
+  function addUndo(box) {
+    if (!canUndo()) return;
+    var b = el('button', 'quiet undo', '↩ Take this turn back');
+    b.addEventListener('click', undoTurn);
+    box.appendChild(b);
   }
 
   function save() {
@@ -494,25 +585,63 @@
     expert: 'Two extra face-down cards for the Rat. A Joker is used at Hand Resolution: flip Deck cards into your hand until you stop — or until the Rat’s suit shows up and costs you a Debt.'
   };
 
+  /* What a seat is called when nobody has typed anything. */
+  function defaultName(idx) {
+    if (idx === 0) return 'You';
+    return setup.bots[idx] ? 'Bot ' + Cards.SUIT_GLYPH[setup.suits[idx]] : 'Player ' + (idx + 1);
+  }
+
+  function seatName(idx) {
+    return (setup.names[idx] || '').trim() || defaultName(idx);
+  }
+
+  function rememberNames() {
+    try { localStorage.setItem(NAMES_KEY, JSON.stringify(setup.names)); } catch (e) {}
+  }
+  function recallNames() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(NAMES_KEY) || '[]');
+      if (saved && saved.length) {
+        for (var i = 0; i < 4; i++) setup.names[i] = saved[i] || '';
+      }
+    } catch (e) {}
+  }
+
   function refreshSetup() {
     var picker = $('char-picker');
     picker.innerHTML = '';
     for (var i = 0; i < setup.players; i++) {
       (function (idx) {
+        var seat = el('div', 'seat-row');
+        var top = el('div', 'seat-top');
+
+        var name = el('input', 'seat-name');
+        name.type = 'text';
+        name.maxLength = 16;
+        name.value = setup.names[idx] || '';
+        name.placeholder = defaultName(idx);
+        name.setAttribute('aria-label', 'Name for seat ' + (idx + 1));
+        name.addEventListener('input', function () {
+          setup.names[idx] = name.value;
+          rememberNames();
+        });
+        top.appendChild(name);
+
         var row = el('div', 'char-row');
         var who = el('button', 'who');
         if (idx === 0) {
-          who.textContent = 'You';
+          who.textContent = '🧑 You';
           who.disabled = true;
         } else if (setup.bots[idx]) {
           who.textContent = '🤖 Bot';
           who.classList.add('bot');
           who.addEventListener('click', function () { setup.bots[idx] = false; refreshSetup(); });
         } else {
-          who.textContent = 'Player ' + (idx + 1);
+          who.textContent = '🧑 Person';
           who.addEventListener('click', function () { setup.bots[idx] = true; refreshSetup(); });
         }
-        row.appendChild(who);
+        top.appendChild(who);
+        seat.appendChild(top);
         var suits = el('div', 'suits');
         Cards.SUITS.forEach(function (su) {
           var b = el('button', (su === 'H' || su === 'D') ? 'red' : '');
@@ -527,7 +656,8 @@
           suits.appendChild(b);
         });
         row.appendChild(suits);
-        picker.appendChild(row);
+        seat.appendChild(row);
+        picker.appendChild(seat);
       })(i);
     }
     $('difficulty-hint').textContent = DIFFICULTY_HINT[setup.difficulty];
@@ -570,12 +700,7 @@
       ensureDistinctSuits();
       var players = [];
       for (var i = 0; i < setup.players; i++) {
-        var isBot = i > 0 && setup.bots[i];
-        players.push({
-          name: i === 0 ? 'You' : (isBot ? 'Bot ' + Cards.SUIT_GLYPH[setup.suits[i]] : 'Player ' + (i + 1)),
-          suit: setup.suits[i],
-          bot: isBot
-        });
+        players.push({ name: seatName(i), suit: setup.suits[i], bot: i > 0 && setup.bots[i] });
       }
       G.newGame({ players: players, difficulty: setup.difficulty });
       startGame();
@@ -701,6 +826,7 @@
   /* ---------------- boot ---------------- */
 
   wireSetup();
+  recallNames();
   ensureDistinctSuits();
   refreshSetup();
 
