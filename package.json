@@ -4,7 +4,7 @@
   "description": "A cooperative poker game against two River Rats, played in the browser with one deck of cards.",
   "private": true,
   "scripts": {
-    "test": "node --test tests/poker.test.js tests/game.test.js tests/bot.test.js",
+    "test": "node --test tests/poker.test.js tests/game.test.js tests/bot.test.js tests/room.test.js tests/api.test.js",
     "start": "python3 -m http.server 8080"
   },
   "license": "MIT"

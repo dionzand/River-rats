@@ -1,0 +1,13 @@
+name = "river-rats-rooms"
+main = "server/worker.js"
+compatibility_date = "2025-04-01"
+
+# One Durable Object per room: a single-threaded actor that owns that table's
+# game. SQLite-backed, which is the flavour the free plan allows.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RiverRatsRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RiverRatsRoom"]
