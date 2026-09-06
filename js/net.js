@@ -156,6 +156,7 @@
           name: seat.name,
           suit: seat.suit,
           bot: seat.bot,
+          away: !!seat.away,
           ace: Cards.card(14, seat.suit),
           hand: seat.id === payload.you.id ? v.myHand.slice() : blanks(known ? known.handCount : 0)
         };

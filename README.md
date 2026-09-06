@@ -133,6 +133,12 @@ seat and the question addressed to it, so nobody's hand is on anybody else's dev
 communication restriction stops being an honour system. It also means the pass-the-phone screen
 is unnecessary, and that a phone can lock, sleep or lose signal and pick the table up again.
 
+**Leaving.** In the lobby your seat goes. Mid-game it stays, because the hand it holds is part
+of the game — a bot plays it out for the others, and the table shows the seat as *(gone)*. A
+phone that simply vanishes — locked, out of signal, closed — is treated the same way after three
+missed poll cycles, so nobody is ever left waiting on somebody else's pocket. A table nobody
+has been at for ten minutes closes itself and deletes what it was holding.
+
 Without a room server configured the option does not appear and everything plays on one phone
 as before.
 

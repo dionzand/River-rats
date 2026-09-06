@@ -63,6 +63,11 @@ export class RiverRatsRoom {
 
   async persist() {
     if (!this.room) return;
+    // A table nobody is at leaves nothing behind.
+    if (this.room.status === 'abandoned') {
+      await this.ctx.storage.deleteAll();
+      return;
+    }
     await this.ctx.storage.put('room', {
       code: this.room.code,
       seats: this.room.seats,

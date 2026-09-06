@@ -176,6 +176,7 @@
         var chip = el('div', 'seat' + (o.i === s.current ? ' active' : ''));
         // A bot's name already carries its suit, so do not print it twice.
         var label = o.bot ? o.name : o.name + ' ' + Cards.SUIT_GLYPH[o.suit];
+        if (o.away) label += ' (gone)';
         chip.innerHTML = '<b>' + label + '</b> · ' + o.hand.length;
         seats.appendChild(chip);
       });
@@ -882,15 +883,19 @@
       sheet.appendChild(el('p', null, 'Your game is saved at the start of every turn, so you can close the app and come back.'));
       sheetButton(sheet, 'How to play', close, 'rules', 'ghost');
       sheetButton(sheet, 'Back to the table', close, 'back', 'primary');
-      var quit = el('button', 'ghost', 'Quit to the title screen');
+      var quit = el('button', 'ghost', inRoom() ? 'Leave the table' : 'Quit to the title screen');
       quit.addEventListener('click', function () {
-        if (!confirm('Leave this game? Your saved game is kept.')) return;
+        var warning = inRoom()
+          ? 'Leave the table? A bot will play your hand out for the others.'
+          : 'Leave this game? Your saved game is kept.';
+        if (!confirm(warning)) return;
         close('quit');
       });
       sheet.appendChild(quit);
     }).then(function (value) {
       if (value === 'rules') showRules();
       if (value === 'quit') {
+        if (inRoom()) return leaveTable();
         $('screen-game').hidden = true;
         $('screen-setup').hidden = false;
         refreshSetup();
@@ -1010,7 +1015,7 @@
       var glyph = el('span', 'suit' + (seat.suit === 'H' || seat.suit === 'D' ? ' red' : ''),
         Cards.SUIT_GLYPH[seat.suit]);
       row.appendChild(glyph);
-      row.appendChild(el('span', null, seat.name + (seat.bot ? ' 🤖' : '')));
+      row.appendChild(el('span', null, seat.name + (seat.bot ? ' 🤖' : (seat.away ? ' (gone)' : ''))));
       if (seat.id === payload.you.id) {
         row.appendChild(el('span', 'you', 'you'));
       } else if (payload.you.host) {
@@ -1035,6 +1040,18 @@
 
   /* Draws the board from what the room sent, then answers if it asked us. */
   function applyRoomPayload(payload) {
+    // A poll already in flight when we left would otherwise draw the table back
+    // over the screen we just went to.
+    if (!roomPolling || !Net.token) return Promise.resolve();
+    if (payload.status === 'abandoned') {
+      roomPolling = false;
+      Net.leave();
+      return openSheet(function (sheet, close) {
+        sheet.appendChild(el('h2', null, 'The table has closed'));
+        sheet.appendChild(el('p', null, 'Everyone left, so the game is over. Start another whenever you like.'));
+        sheetButton(sheet, 'Back', close);
+      }).then(function () { showScreen('setup'); });
+    }
     if (payload.status === 'lobby') {
       showScreen('room');
       renderLobby(payload);
@@ -1104,6 +1121,21 @@
     roomLoop();
   }
 
+  /* Tell the room we are going, so the table is not left waiting on a phone
+     that has walked off. If the message does not get through, the room notices
+     the silence soon enough on its own. */
+  function leaveTable() {
+    var goodbye = Net.token ? Net.act('leave').catch(function () {}) : Promise.resolve();
+    roomPolling = false;
+    return goodbye.then(function () {
+      Net.leave();
+      lastShownResolution = null;
+      showScreen('setup');
+      $('room-entry').hidden = false;
+      $('room-lobby').hidden = true;
+    });
+  }
+
   function wireRoom() {
     if (!Net || !Net.available()) return;
     $('field-mode').hidden = false;
@@ -1143,11 +1175,7 @@
       showScreen('setup');
     });
 
-    $('btn-room-leave').addEventListener('click', function () {
-      roomPolling = false;
-      Net.leave();
-      showScreen('setup');
-    });
+    $('btn-room-leave').addEventListener('click', leaveTable);
 
     $('btn-add-bot').addEventListener('click', function () {
       Net.act('bot').catch(function (e) { roomError(e.message); });
