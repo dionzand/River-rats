@@ -328,3 +328,50 @@ test('a first game still runs the abilities in every other mode', async () => {
   assert.equal(s.ratHand.filter(e => e.faceDown && !e.inactive).length, 4,
     'the ♣ ability is back on outside a first game');
 });
+
+test('two engines hold two separate games', async () => {
+  // A server hosting two rooms runs two games whose turns interleave: both sit
+  // waiting for someone to tap, and a shared state object would have them
+  // overwriting each other's table.
+  const rnd = seeded(777);
+  const realRandom = Math.random;
+  Math.random = rnd;
+  try {
+    const a = G.create();
+    const b = G.create();
+    assert.notEqual(a, b);
+    assert.notEqual(a, G, 'the module itself is one engine, create() makes others');
+
+    a.io = makeBot(rnd);
+    b.io = makeBot(rnd);
+    a.newGame({ players: [{ name: 'A', suit: 'S' }], difficulty: 'normal' });
+    b.newGame({ players: [{ name: 'B', suit: 'H' }], difficulty: 'expert' });
+
+    assert.notEqual(a.state, b.state);
+    assert.equal(a.state.players[0].name, 'A');
+    assert.equal(b.state.players[0].name, 'B');
+    assert.equal(a.state.difficulty, 'normal');
+    assert.equal(b.state.difficulty, 'expert');
+
+    // Interleave them the way two rooms would, and check neither drifts.
+    for (let i = 0; i < 4; i++) {
+      await a.runTurn();
+      if (a.shouldResolve()) await a.resolveHand();
+      await b.runTurn();
+      if (b.shouldResolve()) await b.resolveHand();
+      assert.equal(a.state.players[0].name, 'A', 'game A still belongs to A');
+      assert.equal(b.state.players[0].name, 'B', 'game B still belongs to B');
+      assert.equal(a.state.difficulty, 'normal');
+      assert.equal(b.state.difficulty, 'expert');
+      assert.notEqual(a.state.deck, b.state.deck);
+    }
+    // and all 52 cards are still where they should be, in both games
+    for (const engine of [a, b]) {
+      const ids = census(engine.state);
+      assert.equal(new Set(ids).size, ids.length);
+      assert.equal(ids.length, 52);
+    }
+  } finally {
+    Math.random = realRandom;
+  }
+});
