@@ -222,14 +222,29 @@ button.big { margin-bottom: 10px; }
 .card.small { width: 34px; height: 48px; }
 .card.small .r { font-size: 12px; }
 .card.small .s { font-size: 13px; }
-.card.rat { outline: 2px solid var(--gold); outline-offset: 1px; }
-.card.unknown-rat::after {
-  content: "?";
-  position: absolute;
+/* River Rat cards read as Rats, not as cards you could ever hold. */
+.card.rat-card {
+  background: linear-gradient(165deg, #6a4d1d 0%, #38290f 100%);
   color: var(--gold);
-  font-size: 18px;
-  font-weight: 700;
+  border: 1.5px solid var(--gold);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .35);
 }
+.card.rat-card .mark {
+  font-size: 13px;
+  line-height: 1;
+  margin-bottom: 1px;
+  filter: saturate(.7);
+}
+.card.rat-card .r { font-size: 15px; }
+.card.rat-card .s { font-size: 15px; }
+.card.rat-card.unknown {
+  background: linear-gradient(165deg, #33301f 0%, #1b1a10 100%);
+  border-style: dashed;
+  color: rgba(232, 182, 76, .8);
+}
+.card.rat-card.unknown .r { font-size: 19px; font-weight: 700; }
+.card.small.rat-card .mark { font-size: 10px; }
+.card.small.rat-card .r, .card.small.rat-card .s { font-size: 12px; }
 .card.dim { opacity: .45; }
 .card.seeded::after,
 .card.facedown-play::after {

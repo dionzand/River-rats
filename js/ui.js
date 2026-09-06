@@ -28,7 +28,14 @@
     var b = el('button', 'card');
     b.type = 'button';
     if (opts.small) b.classList.add('small');
-    if (opts.faceDown) {
+    var isRat = !card.joker && G.isRatCard(card);
+    if (opts.faceDown && isRat) {
+      // The River Rat waiting its turn: known to be a Rat, but never revealed.
+      b.classList.add('rat-card', 'unknown');
+      b.appendChild(el('span', 'mark', '🐀'));
+      b.appendChild(el('span', 'r', '?'));
+      b.setAttribute('aria-label', 'the waiting River Rat, face down');
+    } else if (opts.faceDown) {
       b.classList.add('back');
       b.setAttribute('aria-label', 'face-down card');
     } else if (card.joker) {
@@ -36,7 +43,13 @@
       b.appendChild(el('span', 'r', 'JOKER'));
       b.appendChild(el('span', 's', '★'));
     } else {
-      if (card.s === 'H' || card.s === 'D') b.classList.add('red');
+      if (isRat) {
+        b.classList.add('rat-card');
+        b.appendChild(el('span', 'mark', '🐀'));
+        b.setAttribute('aria-label', 'River Rat ' + Cards.SUIT_NAME[card.s]);
+      } else if (card.s === 'H' || card.s === 'D') {
+        b.classList.add('red');
+      }
       b.appendChild(el('span', 'r', Cards.RANK_LABEL[card.r]));
       b.appendChild(el('span', 's', Cards.SUIT_GLYPH[card.s]));
     }
@@ -92,11 +105,7 @@
       ' cards in play';
 
     fill($('rat-hand'), s.ratHand.map(function (e) {
-      return cardEl(e.card, {
-        zone: 'ratHand',
-        faceDown: e.faceDown,
-        classes: [].concat(e.isRat ? ['rat'] : [], e.inactive ? ['dim', 'unknown-rat'] : [])
-      });
+      return cardEl(e.card, { zone: 'ratHand', faceDown: e.faceDown });
     }));
 
     var status = $('rat-status');
