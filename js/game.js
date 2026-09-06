@@ -60,6 +60,10 @@
   function isSolo() { return s().players.length === 1; }
   function collectiveTarget() { return s().bonuses.resolveAtSix ? 6 : 5; }
 
+  /* "First Time Playing: skip Player Powers and River Rats' Abilities." */
+  function abilitiesOn() { return s().difficulty !== 'first'; }
+  function powersOn() { return s().difficulty !== 'first'; }
+
   function deckAvailable() {
     var st = s();
     if (st.deck.length === 0 && st.discard.length > 0) {
@@ -121,7 +125,7 @@
   function faceDownCountForRound() {
     var st = s();
     var n = 2;
-    if (activeRatSuit() === 'C') n += 2;
+    if (abilitiesOn() && activeRatSuit() === 'C') n += 2;
     if (st.difficulty === 'advanced') n += 1;
     if (st.difficulty === 'expert') n += 2;
     n -= st.bonuses.oneLessFaceDown;
@@ -135,7 +139,14 @@
     var players = config.players.map(function (p, i) {
       var ace = Cards.card(14, p.suit);
       Cards.takeById(deck, ace.id);
-      return { i: i, name: p.name || ('Player ' + (i + 1)), suit: p.suit, ace: ace, hand: [] };
+      return {
+        i: i,
+        name: p.name || ('Player ' + (i + 1)),
+        suit: p.suit,
+        bot: !!p.bot,
+        ace: ace,
+        hand: []
+      };
     });
 
     var kings = Cards.shuffle(['S', 'H', 'D', 'C'].map(function (su) { return Cards.card(13, su); }));
@@ -213,7 +224,7 @@
     st.prediction = pred ? PREDICTION_BY_RANK[pred.r] : null;
     st.debtPile = pred ? [pred] : [];
 
-    if (activeRatSuit() === 'D') {
+    if (abilitiesOn() && activeRatSuit() === 'D') {
       var seed = drawTop();
       if (seed) {
         st.collective.push({ card: seed, faceDown: false, seeded: true });
@@ -247,7 +258,7 @@
           });
         }
         if (options.length === 1) return 'play';
-        return G.io.choose({ title: p.name + '’s turn', options: options });
+        return G.io.choose({ tag: 'turn-action', title: p.name + '’s turn', options: options });
       })
       .then(function (choice) {
         if (choice === 'joker') return useJoker(p);
@@ -269,6 +280,7 @@
     else if (!canDeck) next = Promise.resolve('market');
     else {
       next = G.io.choose({
+        tag: 'draw-source',
         title: 'Draw a card (' + (3 - p.hand.length) + ' more to reach your hand limit)',
         options: [
           { value: 'market', label: 'Take from the Market' },
@@ -286,6 +298,7 @@
         return;
       }
       return G.io.pick({
+        tag: 'draw-market',
         title: 'Take a card from the Market',
         zones: { market: st.market.map(function (c) { return c.id; }) }
       }).then(function (sel) {
@@ -305,8 +318,9 @@
         log(p.name + ' ' + vb(p, 'has') + ' no cards to play.', 'sys');
         return;
       }
-      var forcedFaceDown = activeRatSuit() === 'S' && st.collective.length === 0;
+      var forcedFaceDown = abilitiesOn() && activeRatSuit() === 'S' && st.collective.length === 0;
       return G.io.pick({
+        tag: 'play-card',
         title: forcedFaceDown
           ? 'River Rat ♠: play the first card face down'
           : 'Play a card into the Collective Hand',
@@ -326,7 +340,7 @@
 
   function chooseAction(p, card) {
     var options = [];
-    if (card.s === p.suit) {
+    if (powersOn() && card.s === p.suit) {
       options.push({
         value: 'power',
         label: 'Player Power ' + Cards.SUIT_GLYPH[card.s],
@@ -339,7 +353,7 @@
       hint: G.suitText(card.s, isSolo())
     });
     options.push({ value: 'none', label: 'Do nothing' });
-    return G.io.choose({ title: 'You played ' + Cards.label(card), options: options })
+    return G.io.choose({ tag: 'card-action', suit: card.s, title: 'You played ' + Cards.label(card), options: options })
       .then(function (choice) {
         if (choice === 'suit') return suitAction(p, card);
         if (choice === 'power') return playerPower(p, card);
@@ -385,6 +399,7 @@
         return Promise.resolve();
       }
       return G.io.pick({
+        tag: 'clubs-add',
         title: '♣ Add a card from your hand to the Market',
         optional: true,
         zones: { hand: p.hand.map(function (x) { return x.id; }) }
@@ -400,12 +415,15 @@
       var targets = swappableCollective(card);
       if (!targets.length || p.hand.length === 0) { log('♦ has no legal swap.', 'sys'); return Promise.resolve(); }
       return G.io.pick({
+        tag: 'diamonds-out',
+        source: 'hand',
         title: '♦ Choose a card in the Collective Hand to swap out',
         optional: true,
         zones: { collective: targets }
       }).then(function (sel) {
         if (!sel) return;
         return G.io.pick({
+          tag: 'diamonds-in',
           title: '♦ Choose a card from your hand to swap in',
           zones: { hand: p.hand.map(function (x) { return x.id; }) }
         }).then(function (sel2) {
@@ -454,7 +472,8 @@
     if (hand.length) zones.hand = hand;
     if (market.length) zones.market = market;
     if (!zones.hand && !zones.market) return Promise.resolve();
-    return G.io.pick({ title: title, optional: true, zones: zones }).then(function (sel) {
+    return G.io.pick({ tag: 'spades-discard', title: title, optional: true, zones: zones })
+      .then(function (sel) {
       if (!sel) return;
       var from = sel.zone === 'hand' ? p.hand : st.market;
       var card = Cards.takeById(from, sel.id);
@@ -486,6 +505,7 @@
       var addOne = function () {
         if (added >= 2 || st.market.length >= 6 || p.hand.length === 0) return Promise.resolve();
         return G.io.pick({
+          tag: 'clubs-add',
           title: '♣ Add a card to the Market (' + (2 - added) + ' left)',
           optional: true,
           zones: { hand: p.hand.map(function (x) { return x.id; }) }
@@ -505,12 +525,15 @@
       var targets = swappableCollective(card);
       if (!targets.length || st.market.length === 0) { log('♦ has no legal swap.', 'sys'); return Promise.resolve(); }
       return G.io.pick({
+        tag: 'diamonds-out',
+        source: 'market',
         title: '♦ Choose a card in the Collective Hand to swap out',
         optional: true,
         zones: { collective: targets }
       }).then(function (sel) {
         if (!sel) return;
         return G.io.pick({
+          tag: 'diamonds-in',
           title: '♦ Choose a Market card to swap in',
           zones: { market: st.market.map(function (x) { return x.id; }) }
         }).then(function (sel2) {
@@ -524,6 +547,7 @@
         .map(function (e) { return e.card.id; });
       var flip = hidden.length
         ? G.io.pick({
+            tag: 'hearts-flip',
             title: '♥ Flip a card of the River Rat’s Hand face up',
             optional: true,
             zones: { ratHand: hidden }
@@ -535,6 +559,7 @@
         : Promise.resolve();
       return flip.then(function () {
         return G.io.choose({
+          tag: 'hearts-debt',
           title: '♥ Increase the Debt?',
           options: [
             { value: 'no', label: 'Leave the Debt as it is', hint: 'Debt is currently ' + st.debtPile.length + ' card(s)' },
@@ -577,6 +602,7 @@
     var targets = st.ratHand.filter(function (e) { return !e.isRat; }).map(function (e) { return e.card.id; });
     if (!targets.length) return Promise.resolve();
     return G.io.pick({
+      tag: 'joker-remove',
       title: 'Joker: remove a card from the River Rat’s Hand',
       zones: { ratHand: targets }
     }).then(function (sel) {
@@ -606,6 +632,7 @@
     var revealed = [];
     var step = function () {
       return G.io.choose({
+        tag: 'joker-reveal',
         title: 'Joker: reveal the top card of the Deck?',
         options: [
           { value: 'reveal', label: 'Reveal a card', hint: 'It joins the Collective Hand unless it matches ' + Cards.SUIT_GLYPH[activeRatSuit()] },
@@ -650,6 +677,7 @@
       .then(function () {
         if (st.difficulty === 'expert' && availableJoker()) {
           return G.io.choose({
+            tag: 'joker-resolve',
             title: 'Hand Resolution: use a Joker?',
             options: [
               { value: 'no', label: 'Resolve without a Joker' },
@@ -691,7 +719,7 @@
           log('The players win the hand: ' + debtCount + ' Debt to the River Rat ' +
             Cards.SUIT_GLYPH[activeRatSuit()] + '.', 'good');
         } else {
-          if (activeRatSuit() === 'H') {
+          if (abilitiesOn() && activeRatSuit() === 'H') {
             var extraCard = drawTop();
             if (extraCard) { st.debtPile.push(extraCard); extra = 1; }
           }
@@ -733,7 +761,8 @@
       discardCards(rat.debt);
       rat.debt = [];
       var suit = rat.card.s;
-      log('River Rat ' + Cards.SUIT_GLYPH[suit] + ' is defeated! ' + RAT_BONUS[suit], 'good');
+      log('River Rat ' + Cards.SUIT_GLYPH[suit] + ' is defeated!' +
+        (abilitiesOn() ? ' ' + RAT_BONUS[suit] : ''), 'good');
       applyDefeatBonus(suit);
       var other = st.rats[1 - st.activeRat];
       if (other.defeated) {
@@ -743,9 +772,9 @@
       st.activeRat = 1 - st.activeRat;
       defeatPromise = G.io.ratDefeated({
         defeated: rat.card,
-        bonus: RAT_BONUS[suit],
+        bonus: abilitiesOn() ? RAT_BONUS[suit] : null,
         next: other.card,
-        nextAbility: RAT_ABILITY[other.card.s]
+        nextAbility: abilitiesOn() ? RAT_ABILITY[other.card.s] : null
       });
     }
 
@@ -757,6 +786,7 @@
 
   function applyDefeatBonus(suit) {
     var st = s();
+    if (!abilitiesOn()) return;
     if (suit === 'H') {
       if (st.playerDebt.length) {
         st.discard.push(st.playerDebt.pop());
@@ -788,6 +818,95 @@
     st.current = (st.current + 1) % st.players.length;
   };
 
+  /* How many of the cards still to come in this hand this player will play.
+     A hand is always the same size, so the turn order settles it exactly: five
+     cards among four players is one each, and two for whoever started the hand.
+     Counts the play being made right now when it is this player's turn. */
+  function slotsFor(playerIndex) {
+    var st = s();
+    var remaining = collectiveTarget() - st.collective.length;
+    var count = 0;
+    for (var k = 0; k < remaining; k++) {
+      if ((st.current + k) % st.players.length === playerIndex) count += 1;
+    }
+    return count;
+  }
+
+  /* Everything one player may legitimately know, and nothing else. Bots are
+     handed this instead of the game state, so they play blind like a person at
+     the table: no peeking at the Deck, the face-down cards, or anyone's hand.
+     `unseen` is the pool a card the player cannot see must have come from. */
+  G.publicView = function (playerIndex) {
+    var st = s();
+    var me = st.players[playerIndex];
+    var seen = {};
+    var see = function (c) { if (c && !c.joker) seen[c.id] = true; };
+
+    me.hand.forEach(see);
+    st.players.forEach(function (p) { see(p.ace); });   // Characters sit face up
+    st.market.forEach(see);
+    st.discard.forEach(see);
+    if (st.debtPile.length) see(st.debtPile[0]);        // the Joker's Prediction
+
+    var collectiveKnown = [];
+    var collectiveHidden = 0;
+    st.collective.forEach(function (e) {
+      // A card played face down under the Rat's ♠ ability is known to whoever
+      // played it, and to nobody else.
+      if (!e.faceDown || e.owner === playerIndex) {
+        collectiveKnown.push(e.card);
+        see(e.card);
+      } else {
+        collectiveHidden += 1;
+      }
+    });
+
+    var ratFaceUp = [];
+    var ratFaceDownCount = 0;
+    st.ratHand.forEach(function (e) {
+      if (e.counts === false) return;                   // the waiting Rat never counts
+      if (e.faceDown) { ratFaceDownCount += 1; return; }
+      ratFaceUp.push(e.card);
+      see(e.card);
+    });
+
+    var unseen = Cards.fullDeck().filter(function (c) { return !seen[c.id]; });
+
+    return {
+      myIndex: playerIndex,
+      myHand: me.hand.slice(),
+      mySuit: me.suit,
+      handLimit: 3,
+      collectiveKnown: collectiveKnown,
+      collectiveHidden: collectiveHidden,
+      collectiveTarget: collectiveTarget(),
+      mySlotsThisHand: slotsFor(playerIndex),
+      market: st.market.slice(),
+      marketCapacity: st.marketCapacity,
+      ratFaceUp: ratFaceUp,
+      ratFaceDownCount: ratFaceDownCount,
+      ratSuit: activeRatSuit(),
+      ratDebt: activeRat().debt.length,
+      ratsRemaining: st.rats.filter(function (r) { return !r.defeated; }).length,
+      // A River Rat still waiting its turn is one of the Kings nobody has seen,
+      // sitting face down beside the table: it is out of circulation, even
+      // though which King it is stays unknown.
+      waitingRat: st.rats.some(function (r, i) { return i !== st.activeRat && !r.defeated; }),
+      playerDebt: st.playerDebt.length,
+      debtAtStake: st.debtPile.length,
+      prediction: st.prediction,
+      jokerAvailable: !!availableJoker(),
+      jokersUnearned: st.jokers.filter(function (j) { return !j.faceUp && !j.removed; }).length,
+      jokerInCollective: jokerInCollective(),
+      deckCount: st.deck.length,
+      discardCount: st.discard.length,
+      difficulty: st.difficulty,
+      others: st.players.filter(function (p) { return p.i !== playerIndex; })
+        .map(function (p) { return { name: p.name, suit: p.suit, handCount: p.hand.length }; }),
+      unseen: unseen
+    };
+  };
+
   /* True for the two Kings that are River Rats - never for the other two Kings,
      which are ordinary cards in the Deck. */
   G.isRatCard = function (card) {
@@ -804,6 +923,8 @@
   G.PREDICTION_LABEL = PREDICTION_LABEL;
   G.PREDICTION_BY_RANK = PREDICTION_BY_RANK;
   G.collectiveTarget = collectiveTarget;
+  G.abilitiesOn = abilitiesOn;
+  G.powersOn = powersOn;
   G.activeRat = activeRat;
   G.activeRatSuit = activeRatSuit;
   G.currentPlayer = currentPlayer;

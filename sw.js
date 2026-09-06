@@ -1,5 +1,5 @@
 /* Caches the whole game so it keeps working with no signal. */
-var CACHE = 'river-rats-v1';
+var CACHE = 'river-rats-v2';
 var ASSETS = [
   './',
   'index.html',
@@ -7,6 +7,7 @@ var ASSETS = [
   'js/cards.js',
   'js/poker.js',
   'js/game.js',
+  'js/bot.js',
   'js/ui.js',
   'manifest.webmanifest',
   'icon.svg',

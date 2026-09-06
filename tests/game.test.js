@@ -289,3 +289,42 @@ test('a beaten Rat keeps its place in the hand once the second Rat is active', a
   assert.equal(rats[0].card.id, s.rats[s.activeRat].card.id, 'the active Rat leads');
   assert.equal(rats[1].card.id, beaten);
 });
+
+test('a first game skips the Rat abilities and the Player Powers', async () => {
+  // "First Time Playing: skip Player Powers and River Rats' Abilities."
+  const rnd = seeded(2024);
+  const realRandom = Math.random;
+  Math.random = rnd;
+  try {
+    const offered = [];
+    G.io = Object.assign(makeBot(rnd), {
+      choose: spec => {
+        if (spec.tag === 'card-action') offered.push(spec.options.map(o => o.value).join(','));
+        return Promise.resolve(spec.options[0].value);
+      }
+    });
+    G.newGame({ players: [{ name: 'You', suit: 'S' }], difficulty: 'first' });
+    const s = G.state;
+    s.rats[s.activeRat].card = globalThis.RRCards.card(13, 'C');   // the Clubs ability adds cards
+    G.roundSetup();
+    assert.equal(s.ratHand.filter(e => e.faceDown && !e.inactive).length, 2,
+      'no two extra face-down cards from the ♣ ability');
+
+    for (let i = 0; i < 6 && !s.over; i++) {
+      await G.runTurn();
+      if (G.shouldResolve()) await G.resolveHand();
+    }
+    assert.ok(offered.length > 0, 'the player was asked what to do with the card');
+    assert.ok(offered.every(o => o.indexOf('power') < 0), 'no Player Power is ever offered');
+  } finally {
+    Math.random = realRandom;
+  }
+});
+
+test('a first game still runs the abilities in every other mode', async () => {
+  const s = stage({ ours: WEAK, theirs: STRONG, ratSuit: 'C' });
+  assert.equal(s.difficulty, 'normal');
+  await G.resolveHand();
+  assert.equal(s.ratHand.filter(e => e.faceDown && !e.inactive).length, 4,
+    'the ♣ ability is back on outside a first game');
+});
