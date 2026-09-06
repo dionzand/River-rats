@@ -152,3 +152,57 @@ test('an untagged prompt still gets a legal answer', () => {
   const pick = Bot.answer({ zones: { market: ['9D', '2C'] } }, view, {});
   assert.equal(pick.zone, 'market');
 });
+
+test('the unseen pool is card counting: discarded cards leave it', () => {
+  G.io = botIo();
+  newTable(2);
+  const s = G.state;
+  const before = G.publicView(0).unseen.length;
+
+  // Discard five cards off the Deck, as ♠ actions and cleanups do.
+  const dumped = s.deck.splice(0, 5);
+  dumped.forEach(c => s.discard.push(c));
+
+  const after = G.publicView(0);
+  assert.equal(after.unseen.length, before - 5, 'the pool shrinks by what was discarded');
+  dumped.forEach(c => {
+    assert.ok(!after.unseen.some(u => u.id === c.id), c.id + ' is spent and out of the pool');
+  });
+});
+
+test('a reshuffled Discard pile comes back into the pool', () => {
+  G.io = botIo();
+  newTable(2);
+  const s = G.state;
+  const dumped = s.deck.splice(0, 10);
+  dumped.forEach(c => s.discard.push(c));
+  const counted = G.publicView(0).unseen.length;
+
+  // The rulebook: when the Deck runs out, the Discard pile is reshuffled into a
+  // new one - so those cards are live again and the count has to follow.
+  s.deck.length = 0;
+  s.market.push(s.discard.pop());        // any draw triggers the reshuffle
+  s.market.pop();
+  G.roundSetup();
+
+  assert.ok(G.publicView(0).unseen.length > counted - 10,
+    'cards that were spent are in circulation again');
+});
+
+test('a River Rat waiting its turn is known to be out of circulation', async () => {
+  G.io = botIo();
+  newTable(2);
+  assert.equal(G.publicView(0).waitingRat, true, 'one Rat is still face down');
+  const s = G.state;
+  s.rats[1 - s.activeRat].defeated = true;
+  assert.equal(G.publicView(0).waitingRat, false, 'both Rats are on the table now');
+});
+
+test('the Prediction is only worth chasing while a Joker can be earned', () => {
+  G.io = botIo();
+  newTable(2);
+  assert.equal(G.publicView(0).jokersUnearned, 2);
+  G.state.jokers[0].faceUp = true;
+  G.state.jokers[1].removed = true;
+  assert.equal(G.publicView(0).jokersUnearned, 0, 'nothing left to earn');
+});

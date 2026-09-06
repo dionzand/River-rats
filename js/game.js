@@ -873,10 +873,15 @@
       ratSuit: activeRatSuit(),
       ratDebt: activeRat().debt.length,
       ratsRemaining: st.rats.filter(function (r) { return !r.defeated; }).length,
+      // A River Rat still waiting its turn is one of the Kings nobody has seen,
+      // sitting face down beside the table: it is out of circulation, even
+      // though which King it is stays unknown.
+      waitingRat: st.rats.some(function (r, i) { return i !== st.activeRat && !r.defeated; }),
       playerDebt: st.playerDebt.length,
       debtAtStake: st.debtPile.length,
       prediction: st.prediction,
       jokerAvailable: !!availableJoker(),
+      jokersUnearned: st.jokers.filter(function (j) { return !j.faceUp && !j.removed; }).length,
       jokerInCollective: jokerInCollective(),
       deckCount: st.deck.length,
       discardCount: st.discard.length,

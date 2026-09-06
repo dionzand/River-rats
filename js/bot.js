@@ -18,6 +18,12 @@
   var SWAP_MARGIN = 0.04;   // only rearrange the Collective Hand for a real gain
   var JOKER_MARGIN = 0.10;  // Jokers are scarce; spend one only for a clear gain
   var NEVER = 2;            // a confidence no hand can reach: do not raise
+  var MARKET_TOLL = Number(root.RR_MARKET_TOLL != null ? root.RR_MARKET_TOLL : 0.04);
+  // A Joker earned is a wild card in a later round. Matching the Prediction pays
+  // out whoever wins the hand, so a hand that cannot be won can still be played
+  // for one - this says how much of a hand's win chance a Joker is worth.
+  var JOKER_WORTH = Number(root.RR_JOKER_WORTH != null ? root.RR_JOKER_WORTH : 0.25);
+  var PREDICTION_STRIDE = 3;   // check the Prediction on one rollout in three
   var TEAM_CHOICE = 2;      // Deck cards a rollout offers on top of the whole Market
   // How a modelled teammate weighs what is already on the table. Suits matter
   // more than ranks: nobody may say "I have another eight", but everyone can see
@@ -52,6 +58,15 @@
      noise - the gap between a good card and a bad one here is a few percent, and
      so is the error - and the bot ends up picking noise. Dealing once and
      comparing like with like is what makes the choice mean anything. */
+  function removeOneKing(pool) {
+    var kings = [];
+    for (var i = 0; i < pool.length; i++) if (pool[i].r === 13) kings.push(i);
+    if (!kings.length) return;
+    var at = kings[Math.floor(Math.random() * kings.length)];
+    pool[at] = pool[pool.length - 1];
+    pool.pop();
+  }
+
   /* How much shape a part-built hand has. Not a judgement of the hand - just
      enough to tell which card a sensible teammate would add to it. */
   function shape(cards) {
@@ -78,6 +93,10 @@
     var offer = slots * TEAM_CHOICE;
     for (var i = 0; i < n; i++) {
       var pool = view.unseen.slice();
+      // Counting what is gone: the waiting River Rat is one of the unseen Kings
+      // and it can never be dealt to anyone, so take a King out of the pool
+      // before dealing. Which King it is stays unknown, so a rollout picks one.
+      if (view.waitingRat) removeOneKing(pool);
       var theirCards = view.ratFaceUp.concat(dealFrom(pool, hidden));
       // The Market is the team's shared hand: it is face up, so every player can
       // see the same cards and any of them can take one. A rollout therefore
@@ -89,7 +108,13 @@
         offer: slots > 0 ? view.market.concat(dealFrom(pool, Math.min(offer, pool.length))) : []
       });
     }
-    return { worlds: worlds, slots: slots };
+    return {
+      worlds: worlds,
+      slots: slots,
+      // Only worth chasing the Prediction while there is a Joker left to earn.
+      prediction: view.jokersUnearned > 0 ? view.prediction : null,
+      jokerWorth: view.jokersUnearned > 0 ? JOKER_WORTH : 0
+    };
   }
 
   /* Nobody may say what they are holding, but everyone can see the Collective
@@ -112,34 +137,65 @@
     return out;
   }
 
-  function scoreIn(arena, ourCards, mine) {
-    var wins = 0;
+  /* Plays out the arena and reports two things: how often this Collective Hand
+     beats the Rat, and how often it matches the Joker's Prediction. The
+     Prediction pays out whoever wins the hand, so a hand that is already lost is
+     still worth steering toward it. */
+  function playOut(arena, ourCards, mine) {
+    var wins = 0, predicted = 0, checked = 0;
     for (var i = 0; i < arena.worlds.length; i++) {
       var w = arena.worlds[i];
       if (!w.theirs) continue;
-      var best;
+      var cards, best;
       if (!arena.slots) {
-        best = Poker.bestFive(ourCards);
+        cards = ourCards;
+        best = Poker.bestFive(cards);
       } else {
-        best = Poker.bestFive(completeLikeATeam(ourCards, w.offer, arena.slots));
+        cards = completeLikeATeam(ourCards, w.offer, arena.slots);
+        best = Poker.bestFive(cards);
         // The cards still in this player's own hand are not a guess: if they can
         // finish the Collective Hand, that is worth knowing before playing.
         if (mine && mine.length) {
           var own = completeLikeATeam(ourCards, mine.concat(w.offer), arena.slots);
-          var ownHand = Poker.bestFive(own);
-          if (ownHand && (!best || Poker.compare(ownHand.ev, best.ev) > 0)) best = ownHand;
+          var ownBest = Poker.bestFive(own);
+          if (ownBest && (!best || Poker.compare(ownBest.ev, best.ev) > 0)) {
+            cards = own;
+            best = ownBest;
+          }
         }
       }
       if (best && Poker.compare(best.ev, w.theirs.ev) > 0) wins += 1;
+      // The Prediction is a small term in the score, so it does not need every
+      // rollout - a fraction of them is a good enough read for a fraction of a
+      // point, and checking them all is the most expensive thing here.
+      if (arena.prediction && i % PREDICTION_STRIDE === 0) {
+        checked += 1;
+        if (Poker.canForm(cards, arena.prediction)) predicted += 1;
+      }
     }
-    return wins / arena.worlds.length;
+    return {
+      win: wins / arena.worlds.length,
+      prediction: checked ? predicted / checked : 0
+    };
   }
 
+  /* What a play is worth: the hand it wins, plus a Joker earned along the way -
+     but the Joker only counts for the part of the hand that is already lost.
+     Matching the Prediction pays out either way, so it is worth steering a hand
+     that cannot be won toward one; it is never worth steering a hand that can be
+     won away from winning it. */
+  function scoreIn(arena, ourCards, mine) {
+    var out = playOut(arena, ourCards, mine);
+    return out.win + (arena.jokerWorth || 0) * out.prediction * (1 - out.win);
+  }
+
+  /* Pure chance of winning the hand, with no credit for the Prediction - this is
+     what a bet on the Debt rides on. */
   function winChance(view, ourCards, samples) {
     var slots = Math.max(0, view.collectiveTarget - ourCards.length);
     var n = samples || (hasJoker(ourCards) ? SAMPLES_JOKER : SAMPLES);
     if (view.unseen.length < slots + view.ratFaceDownCount) return 0.5;
-    return scoreIn(arena(view, slots, n), ourCards);
+    return playOut(arena(view, slots, n), ourCards).win;
   }
 
   /* Ranks every candidate card by what the Collective Hand becomes with it, with
@@ -223,8 +279,12 @@
 
   handlers['draw-source'] = function (spec, view) {
     if (!view.market.length) return 'deck';
+    // Taking from the Market costs the team more than the card: it is the one
+    // place everyone can see, and only one card a turn can be played anyway. So
+    // a Market card has to beat an unknown one by a margin before it is worth
+    // pulling out of the shared pool and into a hidden hand.
     var best = rank(view, view.market, 60).best;
-    return best.score >= deckValue(view) ? 'market' : 'deck';
+    return best.score >= deckValue(view) + MARKET_TOLL ? 'market' : 'deck';
   };
 
   handlers['draw-market'] = function (spec, view) {
