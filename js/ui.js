@@ -10,6 +10,9 @@
 
   var SAVE_KEY = 'riverrats.save.v1';
 
+  /* The whole rulebook a player needs at a glance, four words at a time. */
+  var SUIT_SHORT = { C: 'to Market', D: 'swap a card', H: 'Debt +1', S: 'discard' };
+
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
     var n = document.createElement(tag);
@@ -138,13 +141,14 @@
       status.appendChild(box);
     });
 
-    $('token-prediction').innerHTML = 'Prediction<b>' +
+    var tag = function (label) { return label + ' <i>ⓘ</i>'; };
+    $('token-prediction').innerHTML = tag('Prediction') + '<b>' +
       (s.prediction ? G.PREDICTION_LABEL[s.prediction] : '—') + '</b>';
-    $('token-debt').innerHTML = 'Debt at stake<b>' + s.debtPile.length + '</b>';
-    $('token-jokers').innerHTML = 'Jokers<b>' + s.jokers.map(function (j) {
+    $('token-debt').innerHTML = tag('Debt at stake') + '<b>' + s.debtPile.length + '</b>';
+    $('token-jokers').innerHTML = tag('Jokers') + '<b>' + s.jokers.map(function (j) {
       return j.removed ? '·' : (j.faceUp ? '★' : '☆');
     }).join(' ') + '</b>';
-    $('token-deck').innerHTML = 'Deck<b>' + s.deck.length + '</b>';
+    $('token-deck').innerHTML = tag('Deck') + '<b>' + s.deck.length + '</b>';
 
     $('collective-note').textContent = s.collective.length + ' / ' + G.collectiveTarget() + ' cards';
     fill($('collective'), s.collective.map(function (e) {
@@ -182,6 +186,19 @@
       return cardEl(c, { zone: 'hand', faceDown: hide });
     }));
 
+    var key = $('suit-key');
+    key.innerHTML = '';
+    Cards.SUITS.forEach(function (su) {
+      var b = el('button', su === p.suit ? 'mine' : '');
+      b.type = 'button';
+      var glyph = el('span', 'g' + (su === 'H' || su === 'D' ? ' red' : ''), Cards.SUIT_GLYPH[su]);
+      b.appendChild(glyph);
+      b.appendChild(document.createTextNode(SUIT_SHORT[su]));
+      if (su === p.suit) b.appendChild(el('span', 'tag', 'your power'));
+      b.addEventListener('click', function () { if (!pending) showAid('suit-' + su); });
+      key.appendChild(b);
+    });
+
     var logBox = $('log');
     logBox.innerHTML = '';
     s.log.slice(-40).reverse().forEach(function (entry) {
@@ -205,6 +222,141 @@
   function otherPlayersNote() {
     return G.state.players.filter(function (o) { return o.i !== G.state.current; })
       .map(function (o) { return o.name + ' ' + o.hand.length; }).join(', ');
+  }
+
+  /* ---------------- player aids ---------------- */
+
+  /* Short answers to "what is this?", written for someone mid-game who does not
+     want to read the rules again. Each returns a title and a few lines; some
+     lean on the state so the answer is about this table, not the rulebook. */
+  function aidContent(topic) {
+    var s = G.state;
+    var suit = G.activeRatSuit();
+    var me = viewer();
+
+    if (topic === 'rat') {
+      return {
+        title: 'The River Rat’s Hand',
+        lines: [
+          'The Rat card itself, five cards face up and two face down — it plays the best five of them. That is eight cards against your five, which is why a pair rarely wins.',
+          G.abilitiesOn()
+            ? 'While it is active: ' + Cards.SUIT_GLYPH[suit] + ' ' + G.RAT_ABILITY[suit]
+            : 'No ability in a first game.',
+          'The card with a ? is the second Rat, waiting its turn. It is never revealed and never counts toward this hand.'
+        ]
+      };
+    }
+    if (topic === 'collective') {
+      return {
+        title: 'The Collective Hand',
+        lines: [
+          'The hand you build together — one card per turn, ' + G.collectiveTarget() +
+            ' in all. When it is full, both hands are shown and compared.',
+          'Only ♦ can change a card already played, and a card played face down under the Rat’s ♠ cannot be touched at all.',
+          'You may talk about the table, but never about the cards in your hand or the hand you are trying to build.'
+        ]
+      };
+    }
+    if (topic === 'market') {
+      return {
+        title: 'The Market',
+        lines: [
+          'Face up and shared: everyone sees the same cards and anyone can take one. It refills from the Deck whenever it drops below ' + s.marketCapacity + '.',
+          '♣ puts a card there for somebody else to use — the one legal way to pass a good card to a teammate.',
+          '♠ clears a card out of it. It can hold six at a push.'
+        ]
+      };
+    }
+    if (topic === 'hand') {
+      return {
+        title: 'Your hand',
+        lines: [
+          'Three cards, refilled one at a time at the start of your turn from the Market or the Deck.',
+          'You play exactly one card per turn into the Collective Hand. This hand needs ' +
+            G.publicView(me.i).mySlotsThisHand + ' more card(s) from you.',
+          'Your Character is the Ace of ' + Cards.SUIT_NAME[me.suit] + ': play a ' +
+            Cards.SUIT_GLYPH[me.suit] + ' and you may use your Player Power instead of the Suit Action.'
+        ]
+      };
+    }
+    if (topic === 'prediction') {
+      return {
+        title: 'The Joker’s Prediction',
+        lines: [
+          'Set by the first Debt card of the round. Match it with the Collective Hand and a Joker turns face up — whoever wins the hand.',
+          'This round: ' + G.PREDICTION_LABEL[s.prediction] + '.',
+          'Ace → straight flush · King → four of a kind · Q, J, 10 → full house · 9 to 6 → flush · 5 to 2 → straight'
+        ]
+      };
+    }
+    if (topic === 'debt') {
+      return {
+        title: 'Debt at stake',
+        lines: [
+          'The pot for this hand: ' + s.debtPile.length + ' card(s). Win and it goes face down on the River Rat; lose and the players take it.',
+          'Five Debt defeats a Rat. Five on the players and the Rats have you.',
+          '♥ adds one to the pot — good when you expect to win, expensive when you do not.'
+        ]
+      };
+    }
+    if (topic === 'jokers') {
+      return {
+        title: 'Jokers',
+        lines: [
+          '☆ still to be earned · ★ face up and ready · · spent.',
+          'Earn one by matching the Prediction. ' + (s.difficulty === 'normal'
+            ? 'Use one instead of your turn: it joins the Collective Hand as any card you like.'
+            : s.difficulty === 'advanced'
+              ? 'Use one instead of your turn: strip a card from the Rat’s Hand — but it draws two more face down.'
+              : 'Use one at Hand Resolution: turn Deck cards into the Collective Hand until you stop, or until the Rat’s suit costs you a Debt.'),
+          'Only one Joker per Collective Hand, and a used Joker leaves the game.'
+        ]
+      };
+    }
+    if (topic === 'deck') {
+      return {
+        title: 'The Deck',
+        lines: [
+          s.deck.length + ' cards left, with ' + s.discard.length + ' in the Discard pile.',
+          'When the Deck runs out, the Discard pile is shuffled into a new one.',
+          'Everything on the table is worth watching: what has been spent is not coming back until then.'
+        ]
+      };
+    }
+    if (topic.indexOf('suit-') === 0) {
+      var su = topic.slice(5);
+      var mine = su === me.suit;
+      return {
+        title: Cards.SUIT_GLYPH[su] + ' ' + Cards.SUIT_NAME[su],
+        lines: [
+          'Suit Action — ' + G.suitText(su, G.isSolo()),
+          mine
+            ? 'Your Player Power — ' + G.powerText(su, G.isSolo())
+            : 'The Player Power for ' + Cards.SUIT_NAME[su] + ' belongs to whoever holds that Ace.',
+          'You may do one or the other when you play the card, or nothing at all.'
+        ]
+      };
+    }
+    return null;
+  }
+
+  function showAid(topic) {
+    var content = aidContent(topic);
+    if (!content) return;
+    openSheet(function (sheet, close) {
+      sheet.appendChild(el('h2', null, content.title));
+      content.lines.forEach(function (line) { sheet.appendChild(el('p', null, line)); });
+      sheetButton(sheet, 'Got it', close);
+    });
+  }
+
+  function wireAids() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-aid]'), function (node) {
+      node.addEventListener('click', function () {
+        if (pending) return;              // mid-choice: do not steal the tap
+        showAid(node.dataset.aid);
+      });
+    });
   }
 
   /* ---------------- prompts ---------------- */
@@ -826,6 +978,7 @@
   /* ---------------- boot ---------------- */
 
   wireSetup();
+  wireAids();
   recallNames();
   ensureDistinctSuits();
   refreshSetup();

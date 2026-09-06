@@ -72,7 +72,7 @@
     <main id="board">
       <div class="zone rat-zone">
         <div class="zone-head">
-          <h2>River Rat’s Hand</h2>
+          <h2 class="aid" data-aid="rat">River Rat’s Hand</h2>
           <span class="zone-note" id="rat-count"></span>
         </div>
         <div class="zone-sub" id="rat-ability"></div>
@@ -82,16 +82,16 @@
 
       <div class="zone table-zone">
         <div class="tokens">
-          <div class="token" id="token-prediction"></div>
-          <div class="token" id="token-debt"></div>
-          <div class="token" id="token-jokers"></div>
-          <div class="token" id="token-deck"></div>
+          <div class="token aid" data-aid="prediction" id="token-prediction"></div>
+          <div class="token aid" data-aid="debt" id="token-debt"></div>
+          <div class="token aid" data-aid="jokers" id="token-jokers"></div>
+          <div class="token aid" data-aid="deck" id="token-deck"></div>
         </div>
       </div>
 
       <div class="zone collective-zone">
         <div class="zone-head">
-          <h2>Collective Hand</h2>
+          <h2 class="aid" data-aid="collective">Collective Hand</h2>
           <span class="zone-note" id="collective-note"></span>
         </div>
         <div class="cards" id="collective"></div>
@@ -99,7 +99,7 @@
 
       <div class="zone market-zone">
         <div class="zone-head">
-          <h2>Market</h2>
+          <h2 class="aid" data-aid="market">Market</h2>
           <span class="zone-note" id="market-note"></span>
         </div>
         <div class="cards" id="market"></div>
@@ -107,11 +107,12 @@
 
       <div class="zone hand-zone">
         <div class="zone-head">
-          <h2 id="hand-title">Your hand</h2>
+          <h2 class="aid" data-aid="hand" id="hand-title">Your hand</h2>
           <span class="zone-note" id="hand-note"></span>
         </div>
         <div class="seats" id="seats"></div>
         <div class="cards" id="hand"></div>
+        <div class="suit-key" id="suit-key"></div>
       </div>
 
       <div class="zone log-zone">

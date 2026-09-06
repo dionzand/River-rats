@@ -113,6 +113,11 @@ The constants worth touching are all at the top of `js/bot.js`.
 Name the seats what you like on the setup screen; the names are remembered for next time. Tap a
 seat to swap between a person and a bot.
 
+Anything marked ⓘ explains itself: the zone headings, the four counters above the Collective
+Hand, and the suit key under your cards. The answers are about the game in front of you — how
+many cards you still play this hand, what the active Rat is doing, what your own Ace lets you do
+— rather than the rulebook in general.
+
 At the end of a hand the face-down cards turn over one at a time, and the outcome follows a beat
 later — tap anywhere to hurry it along.
 
