@@ -113,6 +113,30 @@ export default {
 
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);   // ['api','rooms',CODE?,action?]
+
+    // Somebody has opened the address in a browser. Tell them what this is,
+    // rather than handing them a bare error - and let it double as the
+    // "is it up?" check.
+    if (!parts.length) {
+      return new Response(
+        '<!doctype html><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+        '<title>River Rats rooms</title>' +
+        '<style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;background:#0c171a;' +
+        'color:#eef5f4;margin:0;display:grid;place-items:center;min-height:100vh;padding:24px}' +
+        'main{max-width:30em}a{color:#e8b64c}code{color:#9db0b3}</style>' +
+        '<main><h1>River Rats rooms</h1>' +
+        '<p>This is the server that holds the tables when people play on separate ' +
+        'phones. It deals the cards, so that nobody\u2019s hand sits on anybody ' +
+        'else\u2019s device. It is running.</p>' +
+        '<p>The game is at <a href="https://dionzand.github.io/River-rats/">' +
+        'dionzand.github.io/River-rats</a> \u2014 choose <em>Separate phones</em> there ' +
+        'to start a table.</p>' +
+        '<p><code>POST /api/rooms</code> to make one.</p></main>',
+        { status: 200, headers: Object.assign({ 'content-type': 'text/html; charset=utf-8' }, CORS) }
+      );
+    }
+
     if (parts[0] !== 'api' || parts[1] !== 'rooms') {
       return json({ error: 'not found' }, 404);
     }
