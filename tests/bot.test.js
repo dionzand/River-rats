@@ -221,3 +221,32 @@ test('a bot’s thinking can be made reproducible', () => {
   Bot.setRandom(null);
   assert.equal(first.id, second.id, 'same dice, same decision');
 });
+
+test('a hand is always the same size, so the turn order says who fills it', () => {
+  // Five cards among four players is one each and two for whoever started the
+  // hand - a bot can only count on the turns it will actually get.
+  G.io = botIo();
+  const seats = n => {
+    newTable(n);
+    G.state.collective = [];          // ignore anything the ♦ Rat seeded
+    G.state.current = 0;
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(G.publicView(i).mySlotsThisHand);
+    return out;
+  };
+  assert.deepEqual(seats(1), [5], 'playing alone, every card is yours');
+  assert.deepEqual(seats(2), [3, 2]);
+  assert.deepEqual(seats(3), [2, 2, 1]);
+  assert.deepEqual(seats(4), [2, 1, 1, 1], 'the starting player plays twice');
+
+  newTable(4);
+  G.state.collective = [];
+  G.state.current = 2;                // part way round the table
+  assert.deepEqual([0, 1, 2, 3].map(i => G.publicView(i).mySlotsThisHand), [1, 1, 2, 1]);
+
+  // Once four cards are down only one play is left, and it belongs to one seat.
+  newTable(4);
+  G.state.collective = G.state.deck.splice(0, 4).map(card => ({ card, faceDown: false }));
+  G.state.current = 1;
+  assert.deepEqual([0, 1, 2, 3].map(i => G.publicView(i).mySlotsThisHand), [0, 1, 0, 0]);
+});

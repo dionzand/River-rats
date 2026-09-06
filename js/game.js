@@ -818,6 +818,20 @@
     st.current = (st.current + 1) % st.players.length;
   };
 
+  /* How many of the cards still to come in this hand this player will play.
+     A hand is always the same size, so the turn order settles it exactly: five
+     cards among four players is one each, and two for whoever started the hand.
+     Counts the play being made right now when it is this player's turn. */
+  function slotsFor(playerIndex) {
+    var st = s();
+    var remaining = collectiveTarget() - st.collective.length;
+    var count = 0;
+    for (var k = 0; k < remaining; k++) {
+      if ((st.current + k) % st.players.length === playerIndex) count += 1;
+    }
+    return count;
+  }
+
   /* Everything one player may legitimately know, and nothing else. Bots are
      handed this instead of the game state, so they play blind like a person at
      the table: no peeking at the Deck, the face-down cards, or anyone's hand.
@@ -866,6 +880,7 @@
       collectiveKnown: collectiveKnown,
       collectiveHidden: collectiveHidden,
       collectiveTarget: collectiveTarget(),
+      mySlotsThisHand: slotsFor(playerIndex),
       market: st.market.slice(),
       marketCapacity: st.marketCapacity,
       ratFaceUp: ratFaceUp,

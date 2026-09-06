@@ -129,15 +129,22 @@
      heart. Each rollout picks its cards out of the same offered pool by that
      rule, which is both how teammates really behave and what makes one candidate
      play score differently from another. */
-  function completeLikeATeam(ourCards, offer, slots) {
+  function completeLikeATeam(ourCards, offer, slots, mineIds, mineCap) {
     var out = ourCards.slice();
     var pool = offer.slice();
+    var usedMine = 0;
     for (var s = 0; s < slots && pool.length; s++) {
-      var bestAt = 0, bestScore = -1;
+      var bestAt = -1, bestScore = -1;
       for (var i = 0; i < pool.length; i++) {
+        // A card from this player's own hand can only fill a slot this player
+        // actually gets to play. In a game of four that is usually none once
+        // this turn's card is down, whatever else is left in hand.
+        if (mineIds && mineIds[pool[i].id] && usedMine >= mineCap) continue;
         var score = shape(out.concat([pool[i]]));
         if (score > bestScore) { bestScore = score; bestAt = i; }
       }
+      if (bestAt < 0) break;
+      if (mineIds && mineIds[pool[bestAt].id]) usedMine += 1;
       out.push(pool[bestAt]);
       pool.splice(bestAt, 1);
     }
@@ -148,27 +155,21 @@
      - when the Prediction is being chased - how often it matches that too. */
   function playOut(arena, ourCards, mine) {
     var wins = 0, predicted = 0, checked = 0;
+    var mineIds = null;
+    if (mine && mine.cards && mine.cards.length && mine.cap > 0) {
+      mineIds = {};
+      mine.cards.forEach(function (c) { mineIds[c.id] = true; });
+    }
     for (var i = 0; i < arena.worlds.length; i++) {
       var w = arena.worlds[i];
       if (!w.theirs) continue;
-      var cards, best;
-      if (!arena.slots) {
-        cards = ourCards;
-        best = Poker.bestFive(cards);
-      } else {
-        cards = completeLikeATeam(ourCards, w.offer, arena.slots);
-        best = Poker.bestFive(cards);
-        // The cards still in this player's own hand are not a guess: if they can
-        // finish the Collective Hand, that is worth knowing before playing.
-        if (mine && mine.length) {
-          var own = completeLikeATeam(ourCards, mine.concat(w.offer), arena.slots);
-          var ownBest = Poker.bestFive(own);
-          if (ownBest && (!best || Poker.compare(ownBest.ev, best.ev) > 0)) {
-            cards = own;
-            best = ownBest;
-          }
-        }
-      }
+      var cards = arena.slots
+        ? completeLikeATeam(
+            ourCards,
+            mineIds ? mine.cards.concat(w.offer) : w.offer,
+            arena.slots, mineIds, mineIds ? mine.cap : 0)
+        : ourCards;
+      var best = Poker.bestFive(cards);
       if (best && Poker.compare(best.ev, w.theirs.ev) > 0) wins += 1;
       if (arena.prediction && i % PREDICTION_STRIDE === 0) {
         checked += 1;
@@ -200,7 +201,10 @@
     var slots = Math.max(0, view.collectiveTarget - ourCards.length);
     var n = samples || (hasJoker(ourCards) ? SAMPLES_JOKER : SAMPLES);
     if (view.unseen.length < slots + view.ratFaceDownCount) return 0.5;
-    return playOut(arena(view, slots, n), ourCards).win;
+    return playOut(arena(view, slots, n), ourCards, {
+      cards: view.myHand,
+      cap: Math.max(0, view.mySlotsThisHand == null ? 0 : view.mySlotsThisHand)
+    }).win;
   }
 
   /* Ranks every candidate card by what the Collective Hand becomes with it, with
@@ -210,8 +214,14 @@
     var slots = Math.max(0, view.collectiveTarget - view.collectiveKnown.length - 1);
     var wild = cards.some(function (c) { return c.joker; });
     var a = arena(view, slots, samples || (wild ? SAMPLES_JOKER : SAMPLES));
+    // Whatever is left in hand can only reach the Collective Hand through the
+    // turns this player still gets, and playing this card uses one of them.
+    var cap = Math.max(0, (view.mySlotsThisHand == null ? 1 : view.mySlotsThisHand) - 1);
     var scored = cards.map(function (card) {
-      var mine = view.myHand.filter(function (c) { return c.id !== card.id; });
+      var mine = {
+        cards: view.myHand.filter(function (c) { return c.id !== card.id; }),
+        cap: cap
+      };
       return { card: card, score: scoreIn(a, view.collectiveKnown.concat([card]), mine) };
     });
     scored.sort(function (x, y) { return y.score - x.score; });
