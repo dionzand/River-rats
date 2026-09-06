@@ -1,0 +1,11 @@
+{
+  "name": "river-rats",
+  "version": "1.0.0",
+  "description": "A cooperative poker game against two River Rats, played in the browser with one deck of cards.",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/poker.test.js tests/game.test.js",
+    "start": "python3 -m http.server 8080"
+  },
+  "license": "MIT"
+}
