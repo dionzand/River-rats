@@ -197,12 +197,3 @@ test('a River Rat waiting its turn is known to be out of circulation', async () 
   s.rats[1 - s.activeRat].defeated = true;
   assert.equal(G.publicView(0).waitingRat, false, 'both Rats are on the table now');
 });
-
-test('the Prediction is only worth chasing while a Joker can be earned', () => {
-  G.io = botIo();
-  newTable(2);
-  assert.equal(G.publicView(0).jokersUnearned, 2);
-  G.state.jokers[0].faceUp = true;
-  G.state.jokers[1].removed = true;
-  assert.equal(G.publicView(0).jokersUnearned, 0, 'nothing left to earn');
-});

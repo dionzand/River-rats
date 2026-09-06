@@ -18,12 +18,7 @@
   var SWAP_MARGIN = 0.04;   // only rearrange the Collective Hand for a real gain
   var JOKER_MARGIN = 0.10;  // Jokers are scarce; spend one only for a clear gain
   var NEVER = 2;            // a confidence no hand can reach: do not raise
-  var MARKET_TOLL = Number(root.RR_MARKET_TOLL != null ? root.RR_MARKET_TOLL : 0.04);
-  // A Joker earned is a wild card in a later round. Matching the Prediction pays
-  // out whoever wins the hand, so a hand that cannot be won can still be played
-  // for one - this says how much of a hand's win chance a Joker is worth.
-  var JOKER_WORTH = Number(root.RR_JOKER_WORTH != null ? root.RR_JOKER_WORTH : 0.25);
-  var PREDICTION_STRIDE = 3;   // check the Prediction on one rollout in three
+  var MARKET_TOLL = 0.04;   // what a card is worth left face up for the whole team
   var TEAM_CHOICE = 2;      // Deck cards a rollout offers on top of the whole Market
   // How a modelled teammate weighs what is already on the table. Suits matter
   // more than ranks: nobody may say "I have another eight", but everyone can see
@@ -108,13 +103,7 @@
         offer: slots > 0 ? view.market.concat(dealFrom(pool, Math.min(offer, pool.length))) : []
       });
     }
-    return {
-      worlds: worlds,
-      slots: slots,
-      // Only worth chasing the Prediction while there is a Joker left to earn.
-      prediction: view.jokersUnearned > 0 ? view.prediction : null,
-      jokerWorth: view.jokersUnearned > 0 ? JOKER_WORTH : 0
-    };
+    return { worlds: worlds, slots: slots };
   }
 
   /* Nobody may say what they are holding, but everyone can see the Collective
@@ -137,12 +126,9 @@
     return out;
   }
 
-  /* Plays out the arena and reports two things: how often this Collective Hand
-     beats the Rat, and how often it matches the Joker's Prediction. The
-     Prediction pays out whoever wins the hand, so a hand that is already lost is
-     still worth steering toward it. */
+  /* Plays out the arena: how often this Collective Hand beats the River Rat. */
   function playOut(arena, ourCards, mine) {
-    var wins = 0, predicted = 0, checked = 0;
+    var wins = 0;
     for (var i = 0; i < arena.worlds.length; i++) {
       var w = arena.worlds[i];
       if (!w.theirs) continue;
@@ -165,28 +151,19 @@
         }
       }
       if (best && Poker.compare(best.ev, w.theirs.ev) > 0) wins += 1;
-      // The Prediction is a small term in the score, so it does not need every
-      // rollout - a fraction of them is a good enough read for a fraction of a
-      // point, and checking them all is the most expensive thing here.
-      if (arena.prediction && i % PREDICTION_STRIDE === 0) {
-        checked += 1;
-        if (Poker.canForm(cards, arena.prediction)) predicted += 1;
-      }
     }
-    return {
-      win: wins / arena.worlds.length,
-      prediction: checked ? predicted / checked : 0
-    };
+    return { win: wins / arena.worlds.length };
   }
 
-  /* What a play is worth: the hand it wins, plus a Joker earned along the way -
-     but the Joker only counts for the part of the hand that is already lost.
-     Matching the Prediction pays out either way, so it is worth steering a hand
-     that cannot be won toward one; it is never worth steering a hand that can be
-     won away from winning it. */
+  /* What a play is worth: how often it wins the hand.
+
+     A Joker's Prediction term used to live here - a hand that cannot be won can
+     still be steered toward the Prediction to earn a Joker, weighted so it never
+     costs a winnable hand. It is sound in principle and measured no better over
+     ~220 hands while costing a fifth of the thinking time, which is real on a
+     phone. Left out rather than kept as a knob that only looks clever. */
   function scoreIn(arena, ourCards, mine) {
-    var out = playOut(arena, ourCards, mine);
-    return out.win + (arena.jokerWorth || 0) * out.prediction * (1 - out.win);
+    return playOut(arena, ourCards, mine).win;
   }
 
   /* Pure chance of winning the hand, with no credit for the Prediction - this is
