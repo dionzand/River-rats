@@ -121,16 +121,16 @@
     var activeRat = 0;
     v.rats.forEach(function (r, i) { if (r.active) activeRat = i; });
 
+    // The Rat's Hand as the room has it: the waiting Rat face down at the front,
+    // then everything face up, then the cards it is hiding.
+    //
+    // `ratFaceUp` already contains the active Rat's own card, and any Rat it has
+    // been beaten with - they are face up in the Rat's Hand like anything else.
+    // Adding them again here is what put a second King on the table.
     var ratHand = [];
     v.rats.forEach(function (r, i) {
       if (i !== activeRat && !r.defeated) {
         ratHand.push({ card: rats[i].card, faceDown: true, isRat: true, counts: false, inactive: true });
-      }
-    });
-    ratHand.push({ card: rats[activeRat].card, faceDown: false, isRat: true, counts: true });
-    v.rats.forEach(function (r, i) {
-      if (i !== activeRat && r.defeated) {
-        ratHand.push({ card: rats[i].card, faceDown: false, isRat: true, counts: true });
       }
     });
     v.ratFaceUp.forEach(function (card) {

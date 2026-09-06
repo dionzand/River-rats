@@ -165,7 +165,7 @@
     }));
 
     var p = viewer();
-    var multiHuman = humanCount() > 1;
+    var multiHuman = humanCount() > 1 && !inRoom();
     $('hand-title').textContent = multiHuman ? p.name + '’s hand' : 'Your hand';
     $('hand-note').textContent = Cards.SUIT_GLYPH[p.suit] + ' character · ' + p.hand.length + '/3 cards';
 
@@ -214,6 +214,10 @@
      turn it is when people pass it around, otherwise the one human at the table. */
   function viewer() {
     var s = G.state;
+    // In a room, the phone belongs to one seat and shows that seat's hand
+    // whoever's turn it is. Only when a phone is passed around does the hand on
+    // screen follow the turn.
+    if (inRoom() && s.players[Net.seatId]) return s.players[Net.seatId];
     if (humanCount() > 1) return G.currentPlayer();
     for (var i = 0; i < s.players.length; i++) if (!s.players[i].bot) return s.players[i];
     return s.players[0];
