@@ -124,7 +124,26 @@ body {
 
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; min-height: 1.4em; }
 
-#room-name { display: block; width: 100%; margin-bottom: 2px; }
+#room-name { display: block; width: 100%; margin-bottom: 2px; font-size: 17px; }
+#room-name.asking { border-color: var(--gold); background: rgba(232, 182, 76, .08); }
+#room-entry-error { color: var(--gold); }
+
+.or-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  color: #6d8388;
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.or-line::before, .or-line::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
 
 .code-input {
   display: block;
@@ -176,6 +195,34 @@ body {
   padding: 0 4px;
 }
 #room-error { color: var(--red); }
+
+/* Somebody else's move. */
+.waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 14px 8px;
+  font-size: 16px;
+  color: var(--muted);
+}
+.waiting .suit { font-size: 21px; color: var(--ink); }
+.waiting .suit.red { color: #ff9a92; }
+.waiting .who { color: var(--ink); }
+.dots { display: inline-flex; gap: 4px; align-items: center; }
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: waiting-pulse 1.2s ease-in-out infinite;
+}
+.dots i:nth-child(2) { animation-delay: .18s; }
+.dots i:nth-child(3) { animation-delay: .36s; }
+@keyframes waiting-pulse {
+  0%, 70%, 100% { opacity: .25; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-3px); }
+}
 .credit { color: #6d8388; font-size: 11px; margin-top: 26px; }
 
 button.primary, button.ghost {

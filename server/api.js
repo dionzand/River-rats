@@ -35,6 +35,10 @@
     room.markSeen(seat);          // this phone is still here
 
     if (action === 'view') return ok(room.viewFor(token));
+    if (action === 'seen') {
+      var acked = room.seen(token, Number(body.seq));
+      return acked.error ? bad(acked.error) : ok(room.viewFor(token));
+    }
     if (action === 'leave') {
       var left = room.leave(token);
       return left.error ? bad(left.error) : ok({ left: true });

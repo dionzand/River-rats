@@ -1000,6 +1000,36 @@
 
   function roomError(message) {
     $('room-error').textContent = message || '';
+    // Mid-game the lobby's error line is nowhere to be seen, and a phone that
+    // silently stops asking looks exactly like a phone waiting its turn.
+    if (message && !$('screen-game').hidden) {
+      $('prompt-title').textContent = message;
+      $('prompt-actions').innerHTML = '';
+      var again = el('button', 'quiet', 'Try again');
+      again.addEventListener('click', function () {
+        roomError('');
+        if (!roomPolling) startRoomLoop();
+      });
+      $('prompt-actions').appendChild(again);
+    }
+  }
+
+  function entryError(message) {
+    $('room-entry-error').textContent = message || '';
+  }
+
+  /* Both ways in need a name, so say so rather than seating a stranger. */
+  function askForName() {
+    var field = $('room-name');
+    if (field.value.trim()) {
+      field.classList.remove('asking');
+      entryError('');
+      return true;
+    }
+    field.classList.add('asking');
+    entryError('Put your name in first — the others need to know who you are.');
+    field.focus();
+    return false;
   }
 
   /* The lobby, drawn from whatever the room last told us. */
@@ -1060,15 +1090,27 @@
 
     var table = Net.tableFrom(payload);
     if (!table) return Promise.resolve();
+    if (!payload.resolution) {
+      lastFaceUp = (payload.view.ratFaceUp || []).map(function (c) { return c.id; });
+    }
     G.state = table;
     showScreen('game');
     revealed = true;
     render();
 
-    if (payload.resolution && payload.resolution !== lastShownResolution) {
-      lastShownResolution = payload.resolution;
-      return io.showResolution(payload.resolution);
+    // A hand has been resolved. The table is holding while everyone looks, so
+    // turn the Rat's hidden cards over, show the outcome, and only then tell the
+    // room we have seen it. The prompt for the next round comes afterwards - it
+    // used to arrive in this same payload and be dropped on the floor here,
+    // which left one phone waiting on a question it had already been asked.
+    if (payload.resolution && payload.resolution.seq !== lastShownResolution) {
+      lastShownResolution = payload.resolution.seq;
+      return revealTheHand(payload)
+        .then(function () { return io.showResolution(payload.resolution); })
+        .then(function () { return Net.act('seen', { seq: payload.resolution.seq }); })
+        .catch(function (err) { roomError(err.message); });
     }
+
     if (payload.prompt) {
       var spec = payload.prompt.spec;
       var promptId = payload.prompt.id;
@@ -1088,18 +1130,69 @@
       });
     }
     if (!payload.prompt) {
-      var whose = payload.seats[payload.turn];
-      $('prompt-title').textContent = whose
-        ? 'Waiting for ' + whose.name + '…'
-        : 'Waiting…';
-      $('prompt-actions').innerHTML = '';
+      showWaitingFor(payload.seats[payload.turn], payload.mustSee);
     }
     return Promise.resolve();
   }
 
   var lastShownResolution = null;
+  var lastFaceUp = [];      // what the River Rat was showing before the reveal
+
+  /* Turns over whatever the Rat was hiding, one card at a time, the way a hand
+     resolves on a single phone. Which cards those are is the difference between
+     what it was showing last time we looked and what it is showing now. */
+  function revealTheHand(payload) {
+    var showing = (payload.view.ratFaceUp || []).map(function (c) { return c.id; });
+    var turned = (payload.view.ratFaceUp || []).filter(function (c) {
+      return lastFaceUp.indexOf(c.id) < 0;
+    });
+    lastFaceUp = showing;
+    if (!turned.length) return Promise.resolve();
+
+    skipReveal = false;
+    document.addEventListener('click', hurryReveal, true);
+    var step = function (i) {
+      if (i >= turned.length) {
+        document.removeEventListener('click', hurryReveal, true);
+        revealedId = null;
+        render();
+        return delay(skipReveal ? 80 : 500);
+      }
+      revealedId = turned[i].id;
+      $('prompt-title').textContent = 'Turning them over…  ' + (i + 1) + ' / ' + turned.length;
+      $('prompt-actions').innerHTML = '';
+      render();
+      var turning = document.querySelector('.card.turning');
+      if (turning && turning.scrollIntoView) turning.scrollIntoView({ block: 'center' });
+      return delay(skipReveal ? 60 : 480).then(function () { return step(i + 1); });
+    };
+    return step(0);
+  }
 
   /* Ask the room what has changed, forever, until we leave the table. */
+  /* Whose move it is, said clearly enough to read across a table. */
+  function showWaitingFor(seat, stillLooking) {
+    $('prompt-title').textContent = '';
+    var box = $('prompt-actions');
+    box.innerHTML = '';
+    var line = el('div', 'waiting');
+    if (stillLooking) {
+      line.appendChild(el('span', 'who', 'Waiting for the others to look…'));
+    } else if (seat) {
+      line.appendChild(el('span', 'suit' + (seat.suit === 'H' || seat.suit === 'D' ? ' red' : ''),
+        Cards.SUIT_GLYPH[seat.suit]));
+      line.appendChild(el('span', 'who', seat.name + (seat.bot ? ' is thinking' : ' is playing')));
+    } else {
+      line.appendChild(el('span', 'who', 'Waiting…'));
+    }
+    var dots = el('span', 'dots');
+    dots.appendChild(el('i'));
+    dots.appendChild(el('i'));
+    dots.appendChild(el('i'));
+    line.appendChild(dots);
+    box.appendChild(line);
+  }
+
   function roomLoop() {
     if (!roomPolling) return Promise.resolve();
     return Net.poll()
@@ -1155,17 +1248,20 @@
     });
 
     $('btn-create').addEventListener('click', function () {
-      roomError('');
-      Net.create($('room-name').value).then(function () {
-        startRoomLoop();
-      }).catch(function (e) { roomError(e.message); });
+      if (!askForName()) return;
+      Net.create($('room-name').value).then(startRoomLoop)
+        .catch(function (e) { entryError(e.message); });
     });
 
     $('btn-join').addEventListener('click', function () {
-      roomError('');
-      Net.join($('room-code').value, $('room-name').value).then(function () {
-        startRoomLoop();
-      }).catch(function (e) { roomError(e.message); });
+      if (!askForName()) return;
+      if (!/^[A-Za-z]{4}$/.test($('room-code').value.trim())) {
+        entryError('A table code is four letters.');
+        $('room-code').focus();
+        return;
+      }
+      Net.join($('room-code').value, $('room-name').value).then(startRoomLoop)
+        .catch(function (e) { entryError(e.message); });
     });
 
     $('btn-room-back').addEventListener('click', function () {

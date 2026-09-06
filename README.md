@@ -133,6 +133,10 @@ seat and the question addressed to it, so nobody's hand is on anybody else's dev
 communication restriction stops being an honour system. It also means the pass-the-phone screen
 is unnecessary, and that a phone can lock, sleep or lose signal and pick the table up again.
 
+**A finished hand.** The table pauses while everyone looks: the River Rat's face-down cards turn
+over one at a time on each phone, the outcome follows, and only once everybody has seen it is the
+next round dealt. Anyone who has left, or whose phone has gone quiet, is not waited for.
+
 **Leaving.** In the lobby your seat goes. Mid-game it stays, because the hand it holds is part
 of the game — a bot plays it out for the others, and the table shows the seat as *(gone)*. A
 phone that simply vanishes — locked, out of signal, closed — is treated the same way after three

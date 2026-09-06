@@ -28,6 +28,15 @@ async function playAsPeople(room, tokens, limit) {
   for (let i = 0; i < (limit || 400); i++) {
     await new Promise(r => setImmediate(r));
     if (room.status === 'finished' || room.error) break;
+
+    // A finished hand waits to be looked at before the next one is dealt.
+    let looked = false;
+    Object.keys(tokens).forEach(id => {
+      const seen = room.viewFor(tokens[id]);
+      if (seen.mustSee) { room.seen(tokens[id], seen.resolution.seq); looked = true; }
+    });
+    if (looked) continue;
+
     const asking = room.prompt;
     if (!asking) continue;
     const tok = tokens[asking.seat];
@@ -286,4 +295,67 @@ test('a closed table leaves no promise parked', async () => {
   await new Promise(r => setImmediate(r));
   assert.equal(room.prompt, null);
   assert.ok(unwound, 'the game the room was holding finished rather than hanging');
+});
+
+test('a finished hand waits for everyone before the next is dealt', async () => {
+  const { room } = roomWithClock(50);
+  const a = room.join('A').seat, b = room.join('B').seat;
+  room.start(a.token, 'normal');
+
+  // play until a hand resolves
+  let resolved = null;
+  for (let i = 0; i < 400 && !resolved; i++) {
+    await new Promise(r => setImmediate(r));
+    const seenA = room.viewFor(a.token);
+    if (seenA.resolution) { resolved = seenA; break; }
+    const asking = room.prompt;
+    if (!asking) continue;
+    const tok = asking.seat === 0 ? a.token : b.token;
+    room.answer(tok, asking.id, tap(room.viewFor(tok).prompt.spec));
+  }
+  assert.ok(resolved, 'a hand was played out');
+  assert.ok(resolved.resolution.seq >= 1, 'the hand is numbered so a phone knows it is new');
+
+  // the table is holding: no new question while people are still looking
+  const roundAtRest = room.engine.state.round;
+  assert.equal(room.viewFor(a.token).mustSee, true);
+  assert.equal(room.viewFor(b.token).mustSee, true);
+  assert.equal(room.prompt, null, 'nobody is asked anything mid-look');
+  await new Promise(r => setImmediate(r));
+  assert.equal(room.engine.state.round, roundAtRest, 'and no new round is dealt');
+
+  // one person looks; the other has not, so it still holds
+  room.seen(a.token, resolved.resolution.seq);
+  await new Promise(r => setImmediate(r));
+  assert.equal(room.engine.state.round, roundAtRest, 'still waiting on the other phone');
+  assert.equal(room.viewFor(a.token).mustSee, false, 'but this one is done looking');
+
+  // when the last one looks, play resumes
+  room.seen(b.token, resolved.resolution.seq);
+  for (let i = 0; i < 20 && !room.prompt; i++) await new Promise(r => setImmediate(r));
+  assert.ok(room.prompt || room.status !== 'playing', 'the table moves on');
+  assert.equal(room.viewFor(a.token).resolution, null, 'the finished hand is cleared away');
+});
+
+test('a phone that leaves while everyone is looking does not hold the table', async () => {
+  const { room } = roomWithClock(51);
+  const a = room.join('A').seat, b = room.join('B').seat;
+  room.start(a.token, 'normal');
+
+  let resolution = null;
+  for (let i = 0; i < 400 && !resolution; i++) {
+    await new Promise(r => setImmediate(r));
+    const seen = room.viewFor(a.token);
+    if (seen.resolution) { resolution = seen.resolution; break; }
+    const asking = room.prompt;
+    if (!asking) continue;
+    const tok = asking.seat === 0 ? a.token : b.token;
+    room.answer(tok, asking.id, tap(room.viewFor(tok).prompt.spec));
+  }
+  assert.ok(resolution);
+
+  room.seen(a.token, resolution.seq);        // one looks
+  room.leave(b.token);                       // the other walks off
+  for (let i = 0; i < 20 && !room.prompt; i++) await new Promise(r => setImmediate(r));
+  assert.ok(room.prompt || room.status !== 'playing', 'the table did not stay stuck on the walker');
 });

@@ -72,19 +72,23 @@
 
       <div id="room-entry">
         <div class="field">
-          <label>Your name</label>
-          <input type="text" id="room-name" class="seat-name" maxlength="16" placeholder="You">
+          <label for="room-name">1 · What shall we call you?</label>
+          <input type="text" id="room-name" class="seat-name" maxlength="16" placeholder="Your name">
+          <p class="hint">Everyone at the table sees this.</p>
         </div>
-        <button id="btn-create" class="primary big">Start a new table</button>
-        <p class="hint">You will get a four-letter code to read out.</p>
-        <div class="field" style="margin-top:22px">
-          <label>Or join a table</label>
+
+        <div class="field">
+          <label>2 · Start a table, or join one</label>
+          <button id="btn-create" class="primary big">Start a new table</button>
+          <p class="hint">You get a four-letter code to read out.</p>
+          <div class="or-line"><span>or</span></div>
           <input type="text" id="room-code" class="code-input" maxlength="4"
                  inputmode="latin" autocapitalize="characters" autocomplete="off"
                  autocorrect="off" spellcheck="false" placeholder="CODE"
                  aria-label="The table’s four-letter code">
           <button id="btn-join" class="primary big">Join that table</button>
         </div>
+        <p class="hint" id="room-entry-error"></p>
         <button id="btn-room-back" class="ghost">Back</button>
       </div>
 
