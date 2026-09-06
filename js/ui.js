@@ -6,6 +6,7 @@
   var Cards = window.RRCards;
   var Poker = window.RRPoker;
   var G = window.RRGame;
+  var Bot = window.RRBot;
 
   var SAVE_KEY = 'riverrats.save.v1';
 
@@ -17,7 +18,12 @@
     return n;
   };
 
-  var setup = { players: 1, suits: ['S', 'H', 'D', 'C'], difficulty: 'normal' };
+  var setup = {
+    players: 1,
+    suits: ['S', 'H', 'D', 'C'],
+    bots: [false, true, true, true],   // seat 1 is always the person holding the phone
+    difficulty: 'normal'
+  };
   var pending = null;   // active pick: { zones, resolve, optional }
   var revealed = false; // has the current player looked at their hand?
 
@@ -100,7 +106,9 @@
     $('chip-debt').innerHTML = 'Your Debt <b>' + s.playerDebt.length + '/5</b>';
     $('chip-round').textContent = 'Round ' + s.round;
 
-    $('rat-ability').textContent = Cards.SUIT_GLYPH[suit] + ' ' + G.RAT_ABILITY[suit];
+    $('rat-ability').textContent = G.abilitiesOn()
+      ? Cards.SUIT_GLYPH[suit] + ' ' + G.RAT_ABILITY[suit]
+      : Cards.SUIT_GLYPH[suit] + ' No ability in a first game — it just plays its cards.';
     $('rat-count').textContent = s.ratHand.filter(function (e) { return e.counts !== false; }).length +
       ' cards in play';
 
@@ -143,12 +151,24 @@
       return cardEl(c, { zone: 'market' });
     }));
 
-    var p = G.currentPlayer();
-    $('hand-title').textContent = s.players.length > 1 ? p.name + '’s hand' : 'Your hand';
-    $('hand-note').textContent = Cards.SUIT_GLYPH[p.suit] + ' character · ' +
-      p.hand.length + '/3 cards' +
-      (s.players.length > 1 ? ' · ' + otherPlayersNote() : '');
-    var hide = s.players.length > 1 && !revealed;
+    var p = viewer();
+    var multiHuman = humanCount() > 1;
+    $('hand-title').textContent = multiHuman ? p.name + '’s hand' : 'Your hand';
+    $('hand-note').textContent = Cards.SUIT_GLYPH[p.suit] + ' character · ' + p.hand.length + '/3 cards';
+
+    var seats = $('seats');
+    seats.innerHTML = '';
+    if (s.players.length > 1) {
+      s.players.forEach(function (o) {
+        var chip = el('div', 'seat' + (o.i === s.current ? ' active' : ''));
+        // A bot's name already carries its suit, so do not print it twice.
+        var label = o.bot ? o.name : o.name + ' ' + Cards.SUIT_GLYPH[o.suit];
+        chip.innerHTML = '<b>' + label + '</b> · ' + o.hand.length;
+        seats.appendChild(chip);
+      });
+    }
+
+    var hide = multiHuman && !revealed;
     fill($('hand'), p.hand.map(function (c) {
       return cardEl(c, { zone: 'hand', faceDown: hide });
     }));
@@ -158,6 +178,19 @@
     s.log.slice(-40).reverse().forEach(function (entry) {
       logBox.appendChild(el('div', entry.kind, entry.text));
     });
+  }
+
+  function humanCount() {
+    return G.state.players.filter(function (p) { return !p.bot; }).length;
+  }
+
+  /* The hand on screen belongs to whoever is holding the phone: the player whose
+     turn it is when people pass it around, otherwise the one human at the table. */
+  function viewer() {
+    var s = G.state;
+    if (humanCount() > 1) return G.currentPlayer();
+    for (var i = 0; i < s.players.length; i++) if (!s.players[i].bot) return s.players[i];
+    return s.players[0];
   }
 
   function otherPlayersNote() {
@@ -268,13 +301,56 @@
     return row;
   }
 
+  /* ---------------- bot turns ---------------- */
+
+  var botMemo = {};
+  var lastMood = {};
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function botIsPlaying() {
+    return G.state && !G.state.over && G.currentPlayer().bot;
+  }
+
+  /* A bot answers from RRGame.publicView - its own hand and the face-up table,
+     nothing else - so it plays as blind as the person sitting next to it. */
+  function botAnswer(spec) {
+    var p = G.currentPlayer();
+    if (spec.tag === 'turn-action') botMemo = {};
+    pending = null;
+    render();
+    $('prompt-title').textContent = p.name + ' is thinking…';
+    $('prompt-actions').innerHTML = '';
+    return delay(spec.tag === 'turn-action' ? 450 : 200).then(function () {
+      return Bot.answer(spec, G.publicView(p.i), botMemo);
+    });
+  }
+
+  /* Bots may talk strategy but never about their cards or the hand they are
+     after, so they only ever share a mood - and only when it has changed. */
+  function talk(p, score, view) {
+    if (score == null) return;                       // it never got to play
+    var line = Bot.chatter(view, score, botMemo, p.i);
+    if (lastMood[p.i] === line) return;              // do not repeat itself
+    lastMood[p.i] = line;
+    G.log(p.name + ': “' + line + '”', 'talk');
+  }
+
   /* ---------------- io for the engine ---------------- */
 
   var io = {
-    choose: showChoice,
-    pick: showPick,
+    choose: function (spec) { return botIsPlaying() ? botAnswer(spec) : showChoice(spec); },
+    pick: function (spec) { return botIsPlaying() ? botAnswer(spec) : showPick(spec); },
 
     passTo: function (player) {
+      // Nothing to hide when only one person is holding the phone.
+      if (humanCount() < 2) {
+        revealed = true;
+        render();
+        return Promise.resolve();
+      }
       revealed = false;
       render();
       return openSheet(function (sheet, close) {
@@ -321,10 +397,14 @@
       return openSheet(function (sheet, close) {
         sheet.appendChild(el('h2', null, 'River Rat ' + Cards.SUIT_GLYPH[info.defeated.s] + ' is defeated!'));
         sheet.appendChild(el('p', null, 'It scurries back to its cabin in debt. Its ability is switched off, but the card stays in the Rat’s Hand.'));
-        sheet.appendChild(el('h3', null, 'Defeat bonus'));
-        sheet.appendChild(el('p', null, info.bonus));
+        if (info.bonus) {
+          sheet.appendChild(el('h3', null, 'Defeat bonus'));
+          sheet.appendChild(el('p', null, info.bonus));
+        }
         sheet.appendChild(el('h3', null, 'The second River Rat steps up'));
-        sheet.appendChild(el('p', null, Cards.SUIT_GLYPH[info.next.s] + ' ' + info.nextAbility));
+        sheet.appendChild(el('p', null, info.nextAbility
+          ? Cards.SUIT_GLYPH[info.next.s] + ' ' + info.nextAbility
+          : Cards.SUIT_GLYPH[info.next.s] + ' — no ability in a first game.'));
         sheetButton(sheet, 'Deal the next round', close);
       });
     },
@@ -364,8 +444,12 @@
     if (!G.state || G.state.over) return Promise.resolve();
     save();
     render();
+    var actor = G.currentPlayer();
     return G.runTurn()
       .then(function () {
+        // A bot speaks once its whole turn is done, so what it says can take in
+        // everything it did - the card it played and anything it left behind.
+        if (actor.bot) talk(actor, botMemo.playScore, G.publicView(actor.i));
         render();
         if (G.shouldResolve()) return G.resolveHand();
       })
@@ -394,7 +478,9 @@
   function startGame(state) {
     $('screen-setup').hidden = true;
     $('screen-game').hidden = false;
-    revealed = G.state.players.length === 1;
+    revealed = humanCount() < 2;
+    botMemo = {};
+    lastMood = {};
     render();
     loop();
   }
@@ -402,6 +488,7 @@
   /* ---------------- setup screen ---------------- */
 
   var DIFFICULTY_HINT = {
+    first: 'The rulebook’s first game: no River Rat abilities and no Player Powers, so it is just the cards, the Market and the Debt.',
     normal: 'The River Rat’s Hand holds two face-down cards. Jokers join the Collective Hand as any card.',
     advanced: 'One extra face-down card for the Rat. A Joker instead strips a card from the Rat’s Hand — and it draws two more face down.',
     expert: 'Two extra face-down cards for the Rat. A Joker is used at Hand Resolution: flip Deck cards into your hand until you stop — or until the Rat’s suit shows up and costs you a Debt.'
@@ -413,7 +500,19 @@
     for (var i = 0; i < setup.players; i++) {
       (function (idx) {
         var row = el('div', 'char-row');
-        row.appendChild(el('span', 'who', setup.players === 1 ? 'You' : 'Player ' + (idx + 1)));
+        var who = el('button', 'who');
+        if (idx === 0) {
+          who.textContent = 'You';
+          who.disabled = true;
+        } else if (setup.bots[idx]) {
+          who.textContent = '🤖 Bot';
+          who.classList.add('bot');
+          who.addEventListener('click', function () { setup.bots[idx] = false; refreshSetup(); });
+        } else {
+          who.textContent = 'Player ' + (idx + 1);
+          who.addEventListener('click', function () { setup.bots[idx] = true; refreshSetup(); });
+        }
+        row.appendChild(who);
         var suits = el('div', 'suits');
         Cards.SUITS.forEach(function (su) {
           var b = el('button', (su === 'H' || su === 'D') ? 'red' : '');
@@ -471,9 +570,11 @@
       ensureDistinctSuits();
       var players = [];
       for (var i = 0; i < setup.players; i++) {
+        var isBot = i > 0 && setup.bots[i];
         players.push({
-          name: setup.players === 1 ? 'You' : 'Player ' + (i + 1),
-          suit: setup.suits[i]
+          name: i === 0 ? 'You' : (isBot ? 'Bot ' + Cards.SUIT_GLYPH[setup.suits[i]] : 'Player ' + (i + 1)),
+          suit: setup.suits[i],
+          bot: isBot
         });
       }
       G.newGame({ players: players, difficulty: setup.difficulty });
@@ -542,7 +643,8 @@
       });
       sheet.appendChild(t1);
 
-      sheet.appendChild(el('h3', null, 'Player Powers'));
+      sheet.appendChild(el('h3', null, 'Player Powers' +
+        (G.state && !G.powersOn() ? ' (not in a first game)' : '')));
       var t2 = el('table');
       Cards.SUITS.forEach(function (su) {
         var tr = el('tr');
@@ -574,6 +676,9 @@
       }
       sheet.appendChild(t4);
       sheet.appendChild(el('p', null, 'Flushes, straights and straight flushes are decided by their highest card. If nothing separates the hands it is a True Tie — and the River Rats win those.'));
+
+      sheet.appendChild(el('h3', null, 'Talking'));
+      sheet.appendChild(el('p', null, 'You may discuss general strategy, but never reveal or hint at the cards in your hand, and never name the Collective Hand you are after. Bots keep to the same rule — they will tell you how the table looks and nothing more.'));
 
       sheet.appendChild(el('h3', null, 'River Rats'));
       var t5 = el('table');

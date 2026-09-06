@@ -79,7 +79,19 @@ body {
 
 .char-picker { display: flex; flex-direction: column; gap: 8px; }
 .char-row { display: flex; align-items: center; gap: 8px; }
-.char-row .who { width: 62px; font-size: 13px; color: var(--muted); flex: none; }
+.char-row .who {
+  width: 74px;
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 2px;
+  text-align: center;
+}
+.char-row .who.bot { color: var(--gold); border-color: rgba(232, 182, 76, .45); }
+.char-row .who:disabled { opacity: 1; }
 .char-row .suits { display: flex; gap: 6px; flex: 1; }
 .char-row .suits button {
   flex: 1;
@@ -172,6 +184,19 @@ button.big { margin-bottom: 10px; }
 .zone-sub { font-size: 11px; color: var(--gold); opacity: .85; margin: -2px 0 8px; line-height: 1.35; }
 .cards { display: flex; flex-wrap: wrap; gap: 6px; min-height: 62px; align-items: center; }
 .rat-status { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+
+.seats { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.seat {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.seat.active { border-color: var(--gold); color: var(--gold); background: rgba(232, 182, 76, .08); }
+.seat b { font-weight: 600; }
 
 .table-zone { padding: 8px; }
 .tokens { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -285,6 +310,7 @@ button.big { margin-bottom: 10px; }
 #log .bad { color: var(--red); }
 #log .joker, #log .power { color: #c1a2f0; }
 #log .rat { color: var(--gold); }
+#log .talk { color: #8fd0c4; font-style: italic; }
 
 /* ---------- prompt bar ---------- */
 

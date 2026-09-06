@@ -35,13 +35,14 @@
       </div>
 
       <div class="field">
-        <label>Characters <small>each player takes an Ace</small></label>
+        <label>Characters <small>each takes an Ace — tap a seat for a bot</small></label>
         <div id="char-picker" class="char-picker"></div>
       </div>
 
       <div class="field">
         <label>Difficulty</label>
         <div class="seg" id="seg-difficulty">
+          <button data-d="first">First game</button>
           <button data-d="normal" class="on">Normal</button>
           <button data-d="advanced">Advanced</button>
           <button data-d="expert">Expert</button>
@@ -109,6 +110,7 @@
           <h2 id="hand-title">Your hand</h2>
           <span class="zone-note" id="hand-note"></span>
         </div>
+        <div class="seats" id="seats"></div>
         <div class="cards" id="hand"></div>
       </div>
 
@@ -134,6 +136,7 @@
 <script src="js/cards.js"></script>
 <script src="js/poker.js"></script>
 <script src="js/game.js"></script>
+<script src="js/bot.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>
