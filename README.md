@@ -121,6 +121,21 @@ many cards you still play this hand, what the active Rat is doing, what your own
 At the end of a hand the face-down cards turn over one at a time, and the outcome follows a beat
 later — tap anywhere to hurry it along.
 
+## Playing on separate phones
+
+Once a room server is deployed (`docs/rooms-setup.md`), the setup screen offers **Separate
+phones**. One person starts a table and reads out the four-letter code — or sends the link,
+which drops the others straight into joining. The host arranges the seats, adds bots for any
+empty ones, picks the difficulty, and deals.
+
+The game runs on the server, not on anybody's phone. Each phone is sent the view for its own
+seat and the question addressed to it, so nobody's hand is on anybody else's device — the
+communication restriction stops being an honour system. It also means the pass-the-phone screen
+is unnecessary, and that a phone can lock, sleep or lose signal and pick the table up again.
+
+Without a room server configured the option does not appear and everything plays on one phone
+as before.
+
 ## Layout
 
 ```
@@ -131,6 +146,12 @@ js/poker.js           hand evaluation, the rulebook's tiebreakers, Joker wildcar
 js/game.js            the rules engine: it asks the UI for every decision
 js/bot.js             bot players: rollouts over the cards they cannot see
 js/ui.js              DOM rendering, prompts, sheets, save/resume
+js/net.js             playing in a room: the phone's half
+js/config.js          where the room server lives (empty: multiplayer off)
+server/room.js        one table, hosting one game
+server/api.js         every request a phone can make, with no HTTP in it
+server/worker.js      the Cloudflare wrapper: one room per Durable Object
+server/local.js       the same server on node, for testing (npm run rooms)
 sw.js                 offline cache
 tools/make_icons.py   regenerates the app icons
 tests/                node --test suites for the evaluator and the engine

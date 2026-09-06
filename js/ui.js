@@ -975,10 +975,215 @@
     });
   }
 
+  /* ---------------- playing in a room ---------------- */
+
+  var Net = window.RRNet;
+  var roomPolling = false;
+  var roomDifficulty = 'normal';
+
+  function inRoom() { return !!(Net && Net.token); }
+
+  function showScreen(name) {
+    ['setup', 'room', 'game'].forEach(function (s) {
+      $('screen-' + s).hidden = (s !== name);
+    });
+  }
+
+  function roomError(message) {
+    $('room-error').textContent = message || '';
+  }
+
+  /* The lobby, drawn from whatever the room last told us. */
+  function renderLobby(payload) {
+    $('room-entry').hidden = true;
+    $('room-lobby').hidden = false;
+    $('room-code-display').textContent = payload.code;
+
+    var seats = $('room-seats');
+    seats.innerHTML = '';
+    payload.seats.forEach(function (seat) {
+      var row = el('div', 'lobby-seat');
+      var glyph = el('span', 'suit' + (seat.suit === 'H' || seat.suit === 'D' ? ' red' : ''),
+        Cards.SUIT_GLYPH[seat.suit]);
+      row.appendChild(glyph);
+      row.appendChild(el('span', null, seat.name + (seat.bot ? ' 🤖' : '')));
+      if (seat.id === payload.you.id) {
+        row.appendChild(el('span', 'you', 'you'));
+      } else if (payload.you.host) {
+        var drop = el('button', 'drop', '×');
+        drop.title = 'Remove this seat';
+        drop.addEventListener('click', function () {
+          Net.act('remove', { seat: seat.id }).catch(function (e) { roomError(e.message); });
+        });
+        row.appendChild(drop);
+      }
+      seats.appendChild(row);
+    });
+
+    var host = payload.you.host;
+    $('room-host-controls').hidden = !host;
+    $('btn-add-bot').hidden = !host || payload.seats.length >= 4;
+    $('btn-room-start').hidden = !host;
+    $('room-waiting').textContent = host
+      ? 'Read the code out. Deal when everyone is in.'
+      : 'Waiting for the table’s host to deal…';
+  }
+
+  /* Draws the board from what the room sent, then answers if it asked us. */
+  function applyRoomPayload(payload) {
+    if (payload.status === 'lobby') {
+      showScreen('room');
+      renderLobby(payload);
+      return Promise.resolve();
+    }
+
+    var table = Net.tableFrom(payload);
+    if (!table) return Promise.resolve();
+    G.state = table;
+    showScreen('game');
+    revealed = true;
+    render();
+
+    if (payload.resolution && payload.resolution !== lastShownResolution) {
+      lastShownResolution = payload.resolution;
+      return io.showResolution(payload.resolution);
+    }
+    if (payload.prompt) {
+      var spec = payload.prompt.spec;
+      var promptId = payload.prompt.id;
+      var ask = spec.options ? showChoice(spec) : showPick(spec);
+      return ask.then(function (answer) {
+        return Net.act('answer', { promptId: promptId, answer: answer });
+      }).then(function (fresh) {
+        Net.version = fresh.version;
+        return applyRoomPayload(fresh);
+      });
+    }
+    if (payload.result) {
+      return io.gameOver(payload.result).then(function () {
+        roomPolling = false;
+        Net.leave();
+        showScreen('setup');
+      });
+    }
+    if (!payload.prompt) {
+      var whose = payload.seats[payload.turn];
+      $('prompt-title').textContent = whose
+        ? 'Waiting for ' + whose.name + '…'
+        : 'Waiting…';
+      $('prompt-actions').innerHTML = '';
+    }
+    return Promise.resolve();
+  }
+
+  var lastShownResolution = null;
+
+  /* Ask the room what has changed, forever, until we leave the table. */
+  function roomLoop() {
+    if (!roomPolling) return Promise.resolve();
+    return Net.poll()
+      .then(function (payload) {
+        roomError('');
+        return applyRoomPayload(payload);
+      })
+      .catch(function (err) {
+        roomError(err.message);
+        return delay(1500);
+      })
+      .then(function () { return roomLoop(); });
+  }
+
+  function startRoomLoop() {
+    if (roomPolling) return;
+    roomPolling = true;
+    lastShownResolution = null;
+    roomLoop();
+  }
+
+  function wireRoom() {
+    if (!Net || !Net.available()) return;
+    $('field-mode').hidden = false;
+
+    Array.prototype.forEach.call($('seg-mode').children, function (b) {
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call($('seg-mode').children, function (o) { o.classList.remove('on'); });
+        b.classList.add('on');
+        if (b.dataset.m === 'room') {
+          $('room-name').value = setup.names[0] || '';
+          $('room-entry').hidden = false;
+          $('room-lobby').hidden = true;
+          roomError('');
+          showScreen('room');
+        }
+      });
+    });
+
+    $('btn-create').addEventListener('click', function () {
+      roomError('');
+      Net.create($('room-name').value).then(function () {
+        startRoomLoop();
+      }).catch(function (e) { roomError(e.message); });
+    });
+
+    $('btn-join').addEventListener('click', function () {
+      roomError('');
+      Net.join($('room-code').value, $('room-name').value).then(function () {
+        startRoomLoop();
+      }).catch(function (e) { roomError(e.message); });
+    });
+
+    $('btn-room-back').addEventListener('click', function () {
+      Array.prototype.forEach.call($('seg-mode').children, function (o) {
+        o.classList.toggle('on', o.dataset.m === 'local');
+      });
+      showScreen('setup');
+    });
+
+    $('btn-room-leave').addEventListener('click', function () {
+      roomPolling = false;
+      Net.leave();
+      showScreen('setup');
+    });
+
+    $('btn-add-bot').addEventListener('click', function () {
+      Net.act('bot').catch(function (e) { roomError(e.message); });
+    });
+
+    Array.prototype.forEach.call($('seg-room-difficulty').children, function (b) {
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call($('seg-room-difficulty').children, function (o) {
+          o.classList.remove('on');
+        });
+        b.classList.add('on');
+        roomDifficulty = b.dataset.d;
+      });
+    });
+
+    $('btn-room-start').addEventListener('click', function () {
+      Net.act('start', { difficulty: roomDifficulty }).catch(function (e) { roomError(e.message); });
+    });
+
+    $('btn-share').addEventListener('click', function () {
+      var link = location.href.split('#')[0] + '#' + Net.code;
+      if (navigator.share) navigator.share({ text: 'Join my River Rats table: ' + Net.code, url: link });
+      else if (navigator.clipboard) navigator.clipboard.writeText(link);
+      $('btn-share').textContent = 'Link copied';
+    });
+
+    // Opened from a shared link: drop straight into joining that table.
+    var fromLink = (location.hash || '').replace('#', '').toUpperCase();
+    if (/^[A-Z]{4}$/.test(fromLink)) {
+      $('room-code').value = fromLink;
+      showScreen('room');
+    }
+  }
+
   /* ---------------- boot ---------------- */
 
+  if (window.RRNet) window.RRNet.base = window.RR_ROOM_SERVER || '';
   wireSetup();
   wireAids();
+  wireRoom();
   recallNames();
   ensureDistinctSuits();
   refreshSetup();

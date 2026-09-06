@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/poker.test.js tests/game.test.js tests/bot.test.js tests/room.test.js tests/api.test.js",
-    "start": "python3 -m http.server 8080"
+    "start": "python3 -m http.server 8080",
+    "rooms": "node server/local.js"
   },
   "license": "MIT"
 }

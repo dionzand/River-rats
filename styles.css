@@ -123,6 +123,43 @@ body {
 .char-row .suits button:disabled { opacity: .28; }
 
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; min-height: 1.4em; }
+
+.join-row { display: flex; gap: 8px; }
+.join-row .code { flex: 1; text-transform: uppercase; letter-spacing: .22em; font-size: 18px; }
+.join-row button { width: auto; padding: 0 20px; }
+.code-display {
+  font: 700 40px/1.1 "Iowan Old Style", Georgia, serif;
+  letter-spacing: .18em;
+  color: var(--gold);
+  text-align: center;
+  padding: 14px 0 10px;
+  background: rgba(232, 182, 76, .07);
+  border: 1px solid rgba(232, 182, 76, .35);
+  border-radius: 12px;
+}
+.lobby-seat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.lobby-seat .suit { font-size: 17px; }
+.lobby-seat .suit.red { color: #ff9a92; }
+.lobby-seat .you { margin-left: auto; font-size: 11px; color: var(--gold); }
+.lobby-seat .drop {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 18px;
+  padding: 0 4px;
+}
+#room-error { color: var(--red); }
 .credit { color: #6d8388; font-size: 11px; margin-top: 26px; }
 
 button.primary, button.ghost {
