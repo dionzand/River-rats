@@ -124,9 +124,25 @@ body {
 
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; min-height: 1.4em; }
 
-.join-row { display: flex; gap: 8px; }
-.join-row .code { flex: 1; text-transform: uppercase; letter-spacing: .22em; font-size: 18px; }
-.join-row button { width: auto; padding: 0 20px; }
+#room-name { display: block; width: 100%; margin-bottom: 2px; }
+
+.code-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 16px 10px;
+  font: 700 30px/1 "Iowan Old Style", Georgia, serif;
+  letter-spacing: .3em;
+  text-indent: .3em;              /* keeps the tracking from pushing it left */
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: rgba(0, 0, 0, .25);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.code-input::placeholder { color: #55696d; letter-spacing: .2em; }
+.code-input:focus { outline: none; border-color: var(--gold); }
 .code-display {
   font: 700 40px/1.1 "Iowan Old Style", Georgia, serif;
   letter-spacing: .18em;

@@ -79,11 +79,11 @@
         <p class="hint">You will get a four-letter code to read out.</p>
         <div class="field" style="margin-top:22px">
           <label>Or join a table</label>
-          <div class="join-row">
-            <input type="text" id="room-code" class="seat-name code" maxlength="4"
-                   autocapitalize="characters" autocomplete="off" placeholder="CODE">
-            <button id="btn-join" class="primary">Join</button>
-          </div>
+          <input type="text" id="room-code" class="code-input" maxlength="4"
+                 inputmode="latin" autocapitalize="characters" autocomplete="off"
+                 autocorrect="off" spellcheck="false" placeholder="CODE"
+                 aria-label="The table’s four-letter code">
+          <button id="btn-join" class="primary big">Join that table</button>
         </div>
         <button id="btn-room-back" class="ghost">Back</button>
       </div>
